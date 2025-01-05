@@ -54,8 +54,10 @@ func main() {
 	for {
 		message, _ := reader.ReadString('\n')
 		message = message[:len(message)-1]
+		fmt.Printf("You: %s\n", message)
 		if message == "exit" {
 			fmt.Println("Goodbye!")
+			conn.Close()
 			return
 		}
 		_, err = conn.Write([]byte(message))

@@ -74,12 +74,12 @@ func (s *Server) HandleConnection(conn net.Conn) {
 	s.Connections[userId] = user
 	s.Mutex.Unlock()
 
-	fmt.Printf("User connected: %s (%s)\n", username, userId)
+	fmt.Printf("User connected: %s\n", username)
 
 	for {
 		n, err := conn.Read(buffer)
 		if err != nil {
-			fmt.Printf("User disconnected: %s (%s)\n", username, userId)
+			fmt.Printf("User disconnected: %s\n", username)
 			break
 		}
 
@@ -99,8 +99,9 @@ func (s *Server) HandleConnection(conn net.Conn) {
 func (s *Server) Broadcast() {
 	for message := range s.Messages {
 		s.Mutex.Lock()
+		var err error
 		for _, user := range s.Connections {
-			_, err := user.Conn.Write([]byte(fmt.Sprintf("%s: %s\n", message.SenderId, message.Content)))
+			_, err = user.Conn.Write([]byte(fmt.Sprintf("%s: %s\n", message.SenderId, message.Content)))
 			if err != nil {
 				fmt.Println("Error broadcasting message:", err)
 			}
