@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"sync"
 )
@@ -27,6 +28,7 @@ type User struct {
 func (s *Server) Start() {
 	listen, err := net.Listen("tcp", s.Address)
 	if err != nil {
+		fmt.Println("error in listen")
 		panic(err)
 	}
 
@@ -35,6 +37,7 @@ func (s *Server) Start() {
 	for {
 		conn, err := listen.Accept()
 		if err != nil {
+			fmt.Println("error in accept")
 			panic(err)
 		}
 
@@ -48,6 +51,7 @@ func (s *Server) HandleConnection(conn net.Conn) {
 	buffer := make([]byte, 1024)
 	n, err := conn.Read(buffer)
 	if err != nil {
+		fmt.Println("error in read")
 		panic(err)
 	}
 	userId := string(buffer[:n])
@@ -59,6 +63,7 @@ func (s *Server) HandleConnection(conn net.Conn) {
 	for {
 		n, err := conn.Read(buffer)
 		if err != nil {
+			fmt.Println("error in read loop")
 			break
 		}
 
