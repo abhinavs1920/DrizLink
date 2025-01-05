@@ -73,3 +73,13 @@ func (s *Server) HandleConnection(conn net.Conn) {
 	delete(s.Connections, userId)
 	s.Mutex.Unlock()
 }
+
+func (s *Server) Broadcast() {
+    for message := rangr s.Messages {
+        s.Mutex.Lock()
+        for _, conn := range s.Connections {
+            conn.Write([]byte(message.SenderId + ": " +  message.Content))
+        }
+        s.Mutex.Unlock()
+    }
+}
