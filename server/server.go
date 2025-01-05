@@ -75,11 +75,22 @@ func (s *Server) HandleConnection(conn net.Conn) {
 }
 
 func (s *Server) Broadcast() {
-    for message := rangr s.Messages {
-        s.Mutex.Lock()
-        for _, conn := range s.Connections {
-            conn.Write([]byte(message.SenderId + ": " +  message.Content))
-        }
-        s.Mutex.Unlock()
-    }
+	for message := range s.Messages {
+		s.Mutex.Lock()
+		for _, conn := range s.Connections {
+			conn.Write([]byte(message.SenderId + ": " + message.Content))
+		}
+		s.Mutex.Unlock()
+	}
+}
+
+func main() {
+	server := Server{
+		Address:     "localhost:8080",
+		Connections: make(map[string]net.Conn),
+		Messages:    make(chan Message),
+	}
+
+	go server.Broadcast()
+	server.Start()
 }
