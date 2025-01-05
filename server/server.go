@@ -23,3 +23,53 @@ type User struct {
 	Username string
 	Conn     net.Conn
 }
+
+func (s *Server) Start() {
+	listen, err := net.Listen("tcp", s.Address)
+	if err != nil {
+		panic(err)
+	}
+
+	defer listen.Close()
+
+	for {
+		conn, err := listen.Accept()
+		if err != nil {
+			panic(err)
+		}
+
+		go s.HandleConnection(conn)
+	}
+}
+
+func (s *Server) HandleConnection(conn net.Conn) {
+	defer conn.Close()
+
+	buffer := make([]byte, 1024)
+	n, err := conn.Read(buffer)
+	if err != nil {
+		panic(err)
+	}
+	userId := string(buffer[:n])
+
+	s.Mutex.Lock()
+	s.Connections[userId] = conn
+	s.Mutex.Unlock()
+
+	for {
+		n, err := conn.Read(buffer)
+		if err != nil {
+			break
+		}
+
+		s.Messages <- Message{
+			SenderId:  userId,
+			Content:   string(buffer[:n]),
+			Timestamp: string(buffer[:n]),
+		}
+	}
+
+	s.Mutex.Lock()
+	delete(s.Connections, userId)
+	s.Mutex.Unlock()
+}
