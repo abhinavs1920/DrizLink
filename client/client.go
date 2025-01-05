@@ -1,4 +1,4 @@
-package client
+package main
 
 import (
 	"bufio"
@@ -60,8 +60,8 @@ func main() {
 		}
 		_, err = conn.Write([]byte(message))
 		if err != nil {
-			fmt.Println("error in write message")
-			panic(err)
+			fmt.Println("error in write message", err)
+			return
 		}
 	}
 }
