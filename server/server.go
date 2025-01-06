@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net"
+	"strings"
 	"sync"
 )
 
@@ -99,11 +101,21 @@ func (s *Server) HandleConnection(conn net.Conn) {
 func (s *Server) Broadcast() {
 	for message := range s.Messages {
 		s.Mutex.Lock()
-		var err error
+		// timestamp := time.Now().Format("15:04:05")
+		var sb strings.Builder
+		// sb.WriteString(timestamp)
+		sb.WriteString(" [")
+		sb.WriteString(strings.TrimSpace(message.SenderId))
+		sb.WriteString("]: ")
+		sb.WriteString(strings.TrimSpace(message.Content))
+		sb.WriteString("\n")
+		formattedMsg := sb.String()
+		
+		log.Print(formattedMsg)
 		for _, user := range s.Connections {
-			_, err = user.Conn.Write([]byte(fmt.Sprintf("%s: %s\n", message.SenderId, message.Content)))
+			_, err := user.Conn.Write([]byte(formattedMsg))
 			if err != nil {
-				fmt.Println("Error broadcasting message:", err)
+				log.Printf("Error broadcasting message: %v", err)
 			}
 		}
 		s.Mutex.Unlock()
