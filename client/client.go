@@ -20,11 +20,11 @@ func main() {
 	fmt.Println("Enter your userId: ")
 	reader := bufio.NewReader(os.Stdin)
 	userId, _ := reader.ReadString('\n')
-	userId = userId[:len(userId)-1]
+	userId = strings.TrimSpace(userId)
 
 	fmt.Println("Enter your username: ")
 	username, _ := reader.ReadString('\n')
-	username = username[:len(username)-1]
+	username = strings.TrimSpace(username)
 
 	_, err = conn.Write([]byte(userId))
 	if err != nil {

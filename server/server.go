@@ -98,7 +98,7 @@ func (s *Server) HandleConnection(conn net.Conn) {
 			s.SendFile(userId, recipientId, filepath)
 		} else {
 			s.Messages <- Message{
-			SenderId:  username,
+			SenderId:  userId,
 			Content:   messageContent,
 			Timestamp: "",
 		}
