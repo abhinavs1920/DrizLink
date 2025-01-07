@@ -86,10 +86,21 @@ func (s *Server) HandleConnection(conn net.Conn) {
 		}
 
 		messageContent := string(buffer[:n])
-		s.Messages <- Message{
+		if strings.HasPrefix(messageContent, "/sendfile") {
+			parts := strings.SplitN(messageContent, " ", 3)
+			if len(parts) < 3 {
+				_, _ = conn.Write([]byte("Usage: /sendfile <userId> <filename>\n"))
+				continue
+			}
+			recipientId := parts[1]
+			filepath := parts[2]
+			s.SendFile(userId, recipientId, filepath)
+		} else {
+			s.Messages <- Message{
 			SenderId:  username,
 			Content:   messageContent,
 			Timestamp: "",
+		}
 		}
 	}
 
@@ -97,6 +108,8 @@ func (s *Server) HandleConnection(conn net.Conn) {
 	delete(s.Connections, userId)
 	s.Mutex.Unlock()
 }
+
+func (s* Server) SendFile(senderId, recieverId, filepath string) {}
 
 func (s *Server) Broadcast() {
 	for message := range s.Messages {
