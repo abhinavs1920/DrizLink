@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 )
 
 func main() {
@@ -49,11 +50,11 @@ func main() {
 		}
 	}()
 
-	fmt.Println("You can start typing your messages. Type 'exit' to quit.")
+	fmt.Println("You can start typing your messages. Use '/sendfile <userId> <filename>' to send a file. Type 'exit' to quit.")
 
 	for {
 		message, _ := reader.ReadString('\n')
-		message = message[:len(message)-1]
+		message = strings.TrimSpace(message)
 		if message == "exit" {
 			fmt.Println("Goodbye!")
 			conn.Close()
