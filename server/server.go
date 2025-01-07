@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"strings"
 	"sync"
 )
@@ -109,7 +110,36 @@ func (s *Server) HandleConnection(conn net.Conn) {
 	s.Mutex.Unlock()
 }
 
-func (s* Server) SendFile(senderId, recieverId, filepath string) {}
+func (s* Server) SendFile(senderId, recipientId, filePath string) {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+
+	recipient, exists := s.Connections[recipientId]
+	if !exists {
+		fmt.Printf("User %s not found\n", recipientId)
+		return
+	}
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		fmt.Printf("Error opening file: %v\n", err)
+		_, _ = recipient.Conn.Write([]byte(fmt.Sprintf("Error recieving file from %s: %s\n", senderId, filePath)))
+		return
+	}
+
+	defer file.Close()
+
+	_, _ = recipient.Conn.Write([]byte(fmt.Sprintf("Recieving file from %s: %s\n", senderId, filePath)))
+	buffer := make([]byte, 1024)
+	for {
+		n, err := file.Read(buffer)
+		if err != nil {
+			break
+		}
+		_, _ = recipient.Conn.Write(buffer[:n])
+	}
+	fmt.Printf("File %s sent to %s from %s\n", filePath, recipientId, senderId)
+}
 
 func (s *Server) Broadcast() {
 	for message := range s.Messages {
