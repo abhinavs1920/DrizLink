@@ -23,9 +23,10 @@ type Message struct {
 }
 
 type User struct {
-	UserId   string
-	Username string
-	Conn     net.Conn
+	UserId        string
+	Username      string
+	storeFilePath string
+	Conn          net.Conn
 }
 
 func (s *Server) Start() {
@@ -98,10 +99,10 @@ func (s *Server) HandleConnection(conn net.Conn) {
 			s.SendFile(userId, recipientId, filepath)
 		} else {
 			s.Messages <- Message{
-			SenderId:  userId,
-			Content:   messageContent,
-			Timestamp: "",
-		}
+				SenderId:  userId,
+				Content:   messageContent,
+				Timestamp: "",
+			}
 		}
 	}
 
@@ -110,7 +111,7 @@ func (s *Server) HandleConnection(conn net.Conn) {
 	s.Mutex.Unlock()
 }
 
-func (s* Server) SendFile(senderId, recipientId, filePath string) {
+func (s *Server) SendFile(senderId, recipientId, filePath string) {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 
@@ -153,7 +154,7 @@ func (s *Server) Broadcast() {
 		sb.WriteString(strings.TrimSpace(message.Content))
 		sb.WriteString("\n")
 		formattedMsg := sb.String()
-		
+
 		log.Print(formattedMsg)
 		for _, user := range s.Connections {
 			_, err := user.Conn.Write([]byte(formattedMsg))
