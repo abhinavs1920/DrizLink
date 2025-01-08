@@ -26,6 +26,10 @@ func main() {
 	username, _ := reader.ReadString('\n')
 	username = strings.TrimSpace(username)
 
+	fmt.Println("Enter the file path to capture:")
+	storeFilePath, _ := reader.ReadString('\n')
+	storeFilePath = strings.TrimSpace(storeFilePath)
+
 	_, err = conn.Write([]byte(userId))
 	if err != nil {
 		fmt.Println("error in write userId")
@@ -35,6 +39,12 @@ func main() {
 	_, err = conn.Write([]byte(username))
 	if err != nil {
 		fmt.Println("error in write username")
+		panic(err)
+	}
+
+	_, err = conn.Write([]byte(storeFilePath))
+	if err != nil {
+		fmt.Println("error in write storeFilePath")
 		panic(err)
 	}
 
