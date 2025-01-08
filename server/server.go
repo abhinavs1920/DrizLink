@@ -25,7 +25,7 @@ type Message struct {
 type User struct {
 	UserId        string
 	Username      string
-	storeFilePath string
+	StoreFilePath string
 	Conn          net.Conn
 }
 
@@ -68,10 +68,18 @@ func (s *Server) HandleConnection(conn net.Conn) {
 	}
 	username := string(buffer[:n])
 
+	n, err = conn.Read(buffer)
+	if err != nil {
+		fmt.Println("Error reading Store File Path:", err)
+		return
+	}
+	storeFilePath := string(buffer[:n])
+
 	user := &User{
-		UserId:   userId,
-		Username: username,
-		Conn:     conn,
+		UserId:        userId,
+		Username:      username,
+		StoreFilePath: storeFilePath,
+		Conn:          conn,
 	}
 
 	s.Mutex.Lock()
