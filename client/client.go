@@ -47,6 +47,7 @@ func main() {
 		fmt.Println("error in write storeFilePath")
 		panic(err)
 	}
+	fmt.Println(userId, username, storeFilePath)
 
 	go func() {
 		for {

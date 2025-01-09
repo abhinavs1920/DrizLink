@@ -86,7 +86,7 @@ func (s *Server) HandleConnection(conn net.Conn) {
 	s.Connections[userId] = user
 	s.Mutex.Unlock()
 
-	fmt.Printf("User connected: %s\n", username)
+	fmt.Printf("User connected: %s with file path: %s\n", username, storeFilePath)
 
 	for {
 		n, err := conn.Read(buffer)
@@ -107,7 +107,7 @@ func (s *Server) HandleConnection(conn net.Conn) {
 			s.SendFile(userId, recipientId, filepath)
 		} else {
 			s.Messages <- Message{
-				SenderId:  userId,
+				SenderId:  username,
 				Content:   messageContent,
 				Timestamp: "",
 			}
@@ -138,16 +138,48 @@ func (s *Server) SendFile(senderId, recipientId, filePath string) {
 
 	defer file.Close()
 
-	_, _ = recipient.Conn.Write([]byte(fmt.Sprintf("Recieving file from %s: %s\n", senderId, filePath)))
+	fileName := filePath[strings.LastIndex(filePath, string(os.PathSeparator))+1:]
+
+	recipientFilePath := strings.TrimSpace(recipient.StoreFilePath)
+	fmt.Printf("Recipient %s has store file path: %s\n", recipientId, recipientFilePath)
+	if recipientFilePath == "" {
+		fmt.Printf("Recipient %s has no valid store file path\n", recipientId)
+		_, _ = recipient.Conn.Write([]byte("Invalid store file path."))
+		return
+	}
+
+	outputFilePath := fmt.Sprintf("%s%c%s", recipientFilePath, os.PathSeparator, fileName)
+
+	_, _ = recipient.Conn.Write([]byte(fmt.Sprintf("Receiving file '%s' from %s\n", fileName, senderId)))
+	outputFile, err := os.Create(outputFilePath)
+	if err != nil {
+		fmt.Printf("Error creating file: %v\n", err)
+		_, _ = recipient.Conn.Write([]byte(fmt.Sprintf("Error recieving file from %s: %s\n", senderId, filePath)))
+		return
+	}
+
+	defer outputFile.Close()
+
 	buffer := make([]byte, 1024)
 	for {
 		n, err := file.Read(buffer)
+		if n > 0 {
+			_, writeErr := outputFile.Write(buffer[:n])
+			if writeErr != nil {
+				fmt.Printf("Error writing to file: %v\n", writeErr)
+				break
+			}
+		}
 		if err != nil {
+			if err.Error() != "EOF" {
+				fmt.Printf("Error reading file: %v\n", err)
+			}
 			break
 		}
 		_, _ = recipient.Conn.Write(buffer[:n])
 	}
-	fmt.Printf("File %s sent to %s from %s\n", filePath, recipientId, senderId)
+	fmt.Printf("File %s sent to %s and saved at %s\n", filePath, recipientId, outputFilePath)
+	_, _ = recipient.Conn.Write([]byte("File received and saved successfully."))
 }
 
 func (s *Server) Broadcast() {
