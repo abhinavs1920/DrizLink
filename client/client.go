@@ -22,25 +22,25 @@ func main() {
 	userId, _ := reader.ReadString('\n')
 	userId = strings.TrimSpace(userId)
 
-	fmt.Println("Enter your username: ")
-	username, _ := reader.ReadString('\n')
-	username = strings.TrimSpace(username)
-
-	fmt.Println("Enter the file path to capture:")
-	storeFilePath, _ := reader.ReadString('\n')
-	storeFilePath = strings.TrimSpace(storeFilePath)
-
 	_, err = conn.Write([]byte(userId))
 	if err != nil {
 		fmt.Println("error in write userId")
 		panic(err)
 	}
 
+	fmt.Println("Enter your username: ")
+	username, _ := reader.ReadString('\n')
+	username = strings.TrimSpace(username)
+
 	_, err = conn.Write([]byte(username))
 	if err != nil {
 		fmt.Println("error in write username")
 		panic(err)
 	}
+
+	fmt.Println("Enter the file path to capture:")
+	storeFilePath, _ := reader.ReadString('\n')
+	storeFilePath = strings.TrimSpace(storeFilePath)
 
 	_, err = conn.Write([]byte(storeFilePath))
 	if err != nil {
