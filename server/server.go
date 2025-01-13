@@ -142,7 +142,17 @@ func (s *Server) HandleConnection(conn net.Conn) {
 }
 
 func (s *Server) HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize int, fileData []byte) {
-
+	recipient, exists := s.Connections[recipientId]
+	if exists {
+		_, err := recipient.Conn.Write([]byte(fmt.Sprintf("/FILE_RESPONSE %s %s %d\n", recipientId, fileName, fileSize)))
+		if err != nil {
+			fmt.Printf("Error sending file response to %s: %v\n", recipientId, err)
+		}
+		_, err = recipient.Conn.Write(fileData)
+		if err != nil {
+			fmt.Printf("Error sending file to %s: %v\n", recipientId, err)
+		}
+	}
 }
 
 func (s *Server) SendFile(senderId, recipientId, filePath string) {
