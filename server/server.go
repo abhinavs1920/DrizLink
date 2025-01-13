@@ -122,13 +122,19 @@ func (s *Server) SendFile(senderId, recipientId, filePath string) {
 	s.Mutex.Lock()
 	defer s.Mutex.Unlock()
 
-	recipient, exists := s.Connections[recipientId]
+	_, exists := s.Connections[recipientId]
 	if !exists {
 		fmt.Printf("User %s not found\n", recipientId)
 		return
 	}
 
-	_, err := recipient.Conn.Write([]byte(fmt.Sprintf("/sendfile %s %s\n", senderId, filePath)))
+	sender, exists := s.Connections[senderId]
+	if !exists {
+		fmt.Printf("User %s not found\n", senderId)
+		return
+	}
+
+	_, err := sender.Conn.Write([]byte(fmt.Sprintf("/sendfile %s %s\n", recipientId, filePath)))
 	if err != nil {
 		fmt.Printf("Error sending file to %s: %v\n", recipientId, err)
 	}

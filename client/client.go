@@ -112,7 +112,7 @@ func handleSendFile(conn net.Conn, recipientId, filePath string) {
 		return
 	}
 
-	_, err = conn.Write([]byte(fmt.Sprintf("/sendfile %s %s %d\n", recipientId, fileName, fileSize)))
+	_, err = conn.Write([]byte(fmt.Sprintf("/FILE_REQUEST %s %s %d\n", recipientId, fileName, fileSize)))
 	if err != nil {
 		fmt.Println("error in write sendfile", err)
 		return
