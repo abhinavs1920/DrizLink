@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"os"
 	"strings"
 	"sync"
 )
@@ -129,57 +128,10 @@ func (s *Server) SendFile(senderId, recipientId, filePath string) {
 		return
 	}
 
-	file, err := os.Open(filePath)
+	_, err := recipient.Conn.Write([]byte(fmt.Sprintf("/sendfile %s %s\n", senderId, filePath)))
 	if err != nil {
-		fmt.Printf("Error opening file: %v\n", err)
-		_, _ = recipient.Conn.Write([]byte(fmt.Sprintf("Error recieving file from %s: %s\n", senderId, filePath)))
-		return
+		fmt.Printf("Error sending file to %s: %v\n", recipientId, err)
 	}
-
-	defer file.Close()
-
-	fileName := filePath[strings.LastIndex(filePath, string(os.PathSeparator))+1:]
-
-	recipientFilePath := strings.TrimSpace(recipient.StoreFilePath)
-	fmt.Printf("Recipient %s has store file path: %s\n", recipientId, recipientFilePath)
-	if recipientFilePath == "" {
-		fmt.Printf("Recipient %s has no valid store file path\n", recipientId)
-		_, _ = recipient.Conn.Write([]byte("Invalid store file path."))
-		return
-	}
-
-	outputFilePath := fmt.Sprintf("%s%c%s", recipientFilePath, os.PathSeparator, fileName)
-
-	_, _ = recipient.Conn.Write([]byte(fmt.Sprintf("Receiving file '%s' from %s\n", fileName, senderId)))
-	outputFile, err := os.Create(outputFilePath)
-	if err != nil {
-		fmt.Printf("Error creating file: %v\n", err)
-		_, _ = recipient.Conn.Write([]byte(fmt.Sprintf("Error recieving file from %s: %s\n", senderId, filePath)))
-		return
-	}
-
-	defer outputFile.Close()
-
-	buffer := make([]byte, 1024)
-	for {
-		n, err := file.Read(buffer)
-		if n > 0 {
-			_, writeErr := outputFile.Write(buffer[:n])
-			if writeErr != nil {
-				fmt.Printf("Error writing to file: %v\n", writeErr)
-				break
-			}
-		}
-		if err != nil {
-			if err.Error() != "EOF" {
-				fmt.Printf("Error reading file: %v\n", err)
-			}
-			break
-		}
-		_, _ = recipient.Conn.Write(buffer[:n])
-	}
-	fmt.Printf("File %s sent to %s and saved at %s\n", filePath, recipientId, outputFilePath)
-	_, _ = recipient.Conn.Write([]byte("File received and saved successfully."))
 }
 
 func (s *Server) Broadcast() {
