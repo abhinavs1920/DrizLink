@@ -69,6 +69,16 @@ func main() {
 			fmt.Println("Goodbye!")
 			conn.Close()
 			return
+		} else if strings.HasPrefix(message, "/sendfile") {
+			args := strings.SplitN(message, " ", 3)
+			if len(args) != 3 {
+				fmt.Println("Invalid arguments. Use: /sendfile <userId> <filename>")
+				continue
+			}
+			recipientId := args[1]
+			filePath := args[2]
+			handleSendFile(conn, recipientId, filePath)
+			continue
 		}
 		_, err = conn.Write([]byte(message))
 		if err != nil {
@@ -77,3 +87,5 @@ func main() {
 		}
 	}
 }
+
+func handleSendFile(conn net.Conn, recipientId, filePath string) {}
