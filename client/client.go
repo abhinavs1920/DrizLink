@@ -99,7 +99,7 @@ func main() {
 				fmt.Println("error in read fileData", err)
 				return
 			}
-			HandleFileTransfer(conn, recipientId, fileName, fileSize, fileData)
+			HandleFileTransfer(conn, recipientId, fileName, fileSize, fileData, storeFilePath)
 			continue
 		}
 		_, err = conn.Write([]byte(message))
@@ -147,4 +147,19 @@ func HandleSendFile(conn net.Conn, recipientId, filePath string) {
 	}
 }
 
-func HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize int, fileData []byte) {}
+func HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize int, fileData []byte, storeFilePath string) {
+	file, err := os.Create(storeFilePath + fileName)
+	if err != nil {
+		fmt.Println("error in create file", err)
+		return
+	}
+	defer file.Close()
+
+	_, err = file.Write(fileData)
+	if err != nil {
+		fmt.Println("error in write fileData", err)
+		return
+	}
+
+	fmt.Printf("File %s received from %s with size %d\n", fileName, recipientId, fileSize)
+}
