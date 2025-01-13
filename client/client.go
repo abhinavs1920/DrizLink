@@ -88,4 +88,39 @@ func main() {
 	}
 }
 
-func handleSendFile(conn net.Conn, recipientId, filePath string) {}
+func handleSendFile(conn net.Conn, recipientId, filePath string) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		fmt.Println("error in open file", err)
+		return
+	}
+	defer file.Close()
+
+	fileInfo, err := file.Stat()
+	if err != nil {
+		fmt.Println("error in stat file", err)
+		return
+	}
+
+	fileSize := fileInfo.Size()
+	fileName := fileInfo.Name()
+	buffer := make([]byte, fileSize)
+
+	_, err = file.Read(buffer)
+	if err != nil {
+		fmt.Println("error in read file", err)
+		return
+	}
+
+	_, err = conn.Write([]byte(fmt.Sprintf("/sendfile %s %s %d\n", recipientId, fileName, fileSize)))
+	if err != nil {
+		fmt.Println("error in write sendfile", err)
+		return
+	}
+
+	_, err = conn.Write(buffer)
+	if err != nil {
+		fmt.Println("error in write buffer", err)
+		return
+	}
+}
