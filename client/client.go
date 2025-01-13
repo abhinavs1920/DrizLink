@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -77,7 +78,28 @@ func main() {
 			}
 			recipientId := args[1]
 			filePath := args[2]
-			handleSendFile(conn, recipientId, filePath)
+			HandleSendFile(conn, recipientId, filePath)
+			continue
+		} else if strings.HasPrefix(message, "/FILE_RESPONSE") {
+			args := strings.SplitN(message, " ", 4)
+			if len(args) != 4 {
+				fmt.Println("Invalid arguments. Use: /FILE_RESPONSE <userId> <filename> <fileSize>")
+				continue
+			}
+			recipientId := args[1]
+			fileName := args[2]
+			fileSize, err := strconv.Atoi(args[3])
+			if err != nil {
+				fmt.Println("Invalid fileSize. Use: /FILE_RESPONSE <userId> <filename> <fileSize>")
+				continue
+			}
+			fileData := make([]byte, fileSize)
+			_, err = conn.Read(fileData)
+			if err != nil {
+				fmt.Println("error in read fileData", err)
+				return
+			}
+			HandleFileTransfer(conn, recipientId, fileName, fileSize, fileData)
 			continue
 		}
 		_, err = conn.Write([]byte(message))
@@ -88,7 +110,7 @@ func main() {
 	}
 }
 
-func handleSendFile(conn net.Conn, recipientId, filePath string) {
+func HandleSendFile(conn net.Conn, recipientId, filePath string) {
 	file, err := os.Open(filePath)
 	if err != nil {
 		fmt.Println("error in open file", err)
@@ -124,3 +146,5 @@ func handleSendFile(conn net.Conn, recipientId, filePath string) {
 		return
 	}
 }
+
+func HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize int, fileData []byte) {}
