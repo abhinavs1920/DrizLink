@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -105,6 +106,26 @@ func (s *Server) HandleConnection(conn net.Conn) {
 			recipientId := parts[1]
 			filepath := parts[2]
 			s.SendFile(userId, recipientId, filepath)
+		} else if strings.HasPrefix(messageContent, "/FILE_REQUEST") {
+			parts := strings.SplitN(messageContent, " ", 4)
+			if len(parts) < 4 {
+				_, _ = conn.Write([]byte("Usage: /FILE_REQUEST <userId> <filename> <filesize>\n"))
+				continue
+			}
+			recipientId := parts[1]
+			fileName := parts[2]
+			fileSize, err := strconv.Atoi(parts[3])
+			if err != nil {
+				_, _ = conn.Write([]byte("Invalid file size\n"))
+				continue
+			}
+			fileData := make([]byte, fileSize)
+			_, err = conn.Read(fileData)
+			if err != nil {
+				fmt.Println("error in read file", err)
+				return
+			}
+			s.HandleFileTransfer(conn, recipientId, fileName, fileSize, fileData)
 		} else {
 			s.Messages <- Message{
 				SenderId:       userId,
@@ -118,6 +139,10 @@ func (s *Server) HandleConnection(conn net.Conn) {
 	s.Mutex.Lock()
 	delete(s.Connections, userId)
 	s.Mutex.Unlock()
+}
+
+func (s *Server) HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize int, fileData []byte) {
+
 }
 
 func (s *Server) SendFile(senderId, recipientId, filePath string) {
