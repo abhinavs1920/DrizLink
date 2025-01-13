@@ -16,9 +16,10 @@ type Server struct {
 }
 
 type Message struct {
-	SenderId  string
-	Content   string
-	Timestamp string
+	SenderId       string
+	SenderUsername string
+	Content        string
+	Timestamp      string
 }
 
 type User struct {
@@ -106,9 +107,10 @@ func (s *Server) HandleConnection(conn net.Conn) {
 			s.SendFile(userId, recipientId, filepath)
 		} else {
 			s.Messages <- Message{
-				SenderId:  username,
-				Content:   messageContent,
-				Timestamp: "",
+				SenderId:       userId,
+				SenderUsername: username,
+				Content:        messageContent,
+				Timestamp:      "",
 			}
 		}
 	}
