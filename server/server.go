@@ -130,7 +130,8 @@ func (s *Server) HandleConnection(conn net.Conn) {
 				fmt.Printf("Error reading file data (expected %d bytes): %v\n", fileSize, err)
 				return
 			}
-			s.HandleFileTransfer(conn, recipientId, fileName, int(fileSize), fileData)
+			s.HandleFileTransfer(conn, recipientId, fileName, int64(fileSize), fileData)
+			continue
 		} else {
 			s.Messages <- Message{
 				SenderId:       userId,
@@ -146,7 +147,7 @@ func (s *Server) HandleConnection(conn net.Conn) {
 	s.Mutex.Unlock()
 }
 
-func (s *Server) HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize int, fileData []byte) {
+func (s *Server) HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize int64, fileData []byte) {
 	recipient, exists := s.Connections[recipientId]
 	if exists {
 		_, err := recipient.Conn.Write([]byte(fmt.Sprintf("/FILE_RESPONSE %s %s %d\n", recipientId, fileName, fileSize)))
