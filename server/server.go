@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"strconv"
@@ -114,18 +115,22 @@ func (s *Server) HandleConnection(conn net.Conn) {
 			}
 			recipientId := parts[1]
 			fileName := parts[2]
-			fileSize, err := strconv.Atoi(parts[3])
+			fileSizeStr := strings.TrimSpace(parts[3])
+			fileSize, err := strconv.ParseInt(fileSizeStr, 10, 64)
+
 			if err != nil {
-				_, _ = conn.Write([]byte("Invalid file size\n"))
+				fmt.Printf("Invalid file size '%s': %v\n", fileSizeStr, err)
+				_, _ = conn.Write([]byte(fmt.Sprintf("Invalid file size: %s\n", fileSizeStr)))
 				continue
 			}
+
 			fileData := make([]byte, fileSize)
-			_, err = conn.Read(fileData)
+			_, err = io.ReadFull(conn, fileData)
 			if err != nil {
-				fmt.Println("error in read file", err)
+				fmt.Printf("Error reading file data (expected %d bytes): %v\n", fileSize, err)
 				return
 			}
-			s.HandleFileTransfer(conn, recipientId, fileName, fileSize, fileData)
+			s.HandleFileTransfer(conn, recipientId, fileName, int(fileSize), fileData)
 		} else {
 			s.Messages <- Message{
 				SenderId:       userId,
@@ -152,6 +157,8 @@ func (s *Server) HandleFileTransfer(conn net.Conn, recipientId, fileName string,
 		if err != nil {
 			fmt.Printf("Error sending file to %s: %v\n", recipientId, err)
 		}
+	} else {
+		fmt.Printf("User %s not found\n", recipientId)
 	}
 }
 
