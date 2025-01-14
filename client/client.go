@@ -58,7 +58,33 @@ func main() {
 				fmt.Println("error in read")
 				return
 			}
-			fmt.Println(string(buffer[:n]))
+			message := string(buffer[:n])
+
+			if strings.HasPrefix(message, "/FILE_RESPONSE") {
+				fmt.Println("File transfer response received")
+				args := strings.SplitN(message, " ", 4)
+				if len(args) != 4 {
+					fmt.Println("Invalid arguments. Use: /FILE_RESPONSE <userId> <filename> <fileSize>")
+					continue
+				}
+				recipientId := args[1]
+				fileName := args[2]
+				fileSizeStr := strings.TrimSpace(args[3])
+				fileSize, err := strconv.ParseInt(fileSizeStr, 10, 64)
+				if err != nil {
+					fmt.Println("Invalid fileSize. Use: /FILE_RESPONSE <userId> <filename> <fileSize>")
+					continue
+				}
+
+				fileData := make([]byte, fileSize)
+				_, err = io.ReadFull(conn, fileData)
+				if err != nil {
+					fmt.Println("error in read fileData", err)
+					return
+				}
+				HandleFileTransfer(conn, recipientId, fileName, int64(fileSize), fileData, storeFilePath)
+				continue
+			}
 		}
 	}()
 
@@ -80,27 +106,6 @@ func main() {
 			recipientId := args[1]
 			filePath := args[2]
 			HandleSendFile(conn, recipientId, filePath)
-			continue
-		} else if strings.HasPrefix(message, "/FILE_RESPONSE") {
-			args := strings.SplitN(message, " ", 4)
-			if len(args) != 4 {
-				fmt.Println("Invalid arguments. Use: /FILE_RESPONSE <userId> <filename> <fileSize>")
-				continue
-			}
-			recipientId := args[1]
-			fileName := args[2]
-			fileSize, err := strconv.Atoi(args[3])
-			if err != nil {
-				fmt.Println("Invalid fileSize. Use: /FILE_RESPONSE <userId> <filename> <fileSize>")
-				continue
-			}
-			fileData := make([]byte, fileSize)
-			_, err = io.ReadFull(conn, fileData)
-			if err != nil {
-				fmt.Println("error in read fileData", err)
-				return
-			}
-			HandleFileTransfer(conn, recipientId, fileName, fileSize, fileData, storeFilePath)
 			continue
 		}
 		_, err = conn.Write([]byte(message))
@@ -148,8 +153,9 @@ func HandleSendFile(conn net.Conn, recipientId, filePath string) {
 	}
 }
 
-func HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize int, fileData []byte, storeFilePath string) {
-	file, err := os.Create(storeFilePath + fileName)
+func HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize int64, fileData []byte, storeFilePath string) {
+	filePath := storeFilePath + string(os.PathSeparator) + fileName
+	file, err := os.Create(filePath)
 	if err != nil {
 		fmt.Println("error in create file", err)
 		return
@@ -162,5 +168,4 @@ func HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize in
 		return
 	}
 
-	fmt.Printf("File %s received from %s with size %d\n", fileName, recipientId, fileSize)
 }
