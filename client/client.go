@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strconv"
@@ -94,7 +95,7 @@ func main() {
 				continue
 			}
 			fileData := make([]byte, fileSize)
-			_, err = conn.Read(fileData)
+			_, err = io.ReadFull(conn, fileData)
 			if err != nil {
 				fmt.Println("error in read fileData", err)
 				return
@@ -126,23 +127,23 @@ func HandleSendFile(conn net.Conn, recipientId, filePath string) {
 
 	fileSize := fileInfo.Size()
 	fileName := fileInfo.Name()
-	buffer := make([]byte, fileSize)
-
-	_, err = file.Read(buffer)
-	if err != nil {
-		fmt.Println("error in read file", err)
-		return
-	}
 
 	_, err = conn.Write([]byte(fmt.Sprintf("/FILE_REQUEST %s %s %d\n", recipientId, fileName, fileSize)))
 	if err != nil {
-		fmt.Println("error in write sendfile", err)
+		fmt.Println("Error sending file request:", err)
 		return
 	}
 
-	_, err = conn.Write(buffer)
+	fileData := make([]byte, fileSize)
+	_, err = io.ReadFull(file, fileData)
 	if err != nil {
-		fmt.Println("error in write buffer", err)
+		fmt.Println("error in read fileData", err)
+		return
+	}
+
+	_, err = conn.Write(fileData)
+	if err != nil {
+		fmt.Println("error in write fileData", err)
 		return
 	}
 }
