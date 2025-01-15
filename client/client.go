@@ -133,24 +133,27 @@ func HandleSendFile(conn net.Conn, recipientId, filePath string) {
 	fileSize := fileInfo.Size()
 	fileName := fileInfo.Name()
 
+	// Send file request with file size
 	_, err = conn.Write([]byte(fmt.Sprintf("/FILE_REQUEST %s %s %d\n", recipientId, fileName, fileSize)))
 	if err != nil {
 		fmt.Println("Error sending file request:", err)
 		return
 	}
 
-	fileData := make([]byte, fileSize)
-	_, err = io.ReadFull(file, fileData)
-	if err != nil {
-		fmt.Println("error in read fileData", err)
-		return
+	// Stream file data in chunks using io.CopyN
+	bufferSize := int64(4096) // 4KB chunk size
+	for {
+		written, err := io.CopyN(conn, file, bufferSize)
+		if err != nil && err != io.EOF {
+			fmt.Println("error in write fileData", err)
+			return
+		}
+		if written == 0 {
+			break
+		}
 	}
 
-	_, err = conn.Write(fileData)
-	if err != nil {
-		fmt.Println("error in write fileData", err)
-		return
-	}
+	fmt.Printf("Sent file request: %s (size: %d bytes)\n", fileName, fileSize)
 }
 
 func HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize int64, fileData []byte, storeFilePath string) {
@@ -167,5 +170,4 @@ func HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize in
 		fmt.Println("error in write fileData", err)
 		return
 	}
-
 }
