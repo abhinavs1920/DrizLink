@@ -19,16 +19,7 @@ func main() {
 
 	defer conn.Close()
 
-	fmt.Println("Enter your userId: ")
 	reader := bufio.NewReader(os.Stdin)
-	userId, _ := reader.ReadString('\n')
-	userId = strings.TrimSpace(userId)
-
-	_, err = conn.Write([]byte(userId))
-	if err != nil {
-		fmt.Println("error in write userId")
-		panic(err)
-	}
 
 	fmt.Println("Enter your username: ")
 	username, _ := reader.ReadString('\n')

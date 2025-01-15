@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"net"
 	"strconv"
 	"strings"
@@ -57,14 +58,8 @@ func (s *Server) HandleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	buffer := make([]byte, 1024)
-	n, err := conn.Read(buffer)
-	if err != nil {
-		fmt.Println("Error reading User ID:", err)
-		return
-	}
-	userId := string(buffer[:n])
 
-	n, err = conn.Read(buffer)
+	n, err := conn.Read(buffer)
 	if err != nil {
 		fmt.Println("Error reading User Name:", err)
 		return
@@ -78,6 +73,8 @@ func (s *Server) HandleConnection(conn net.Conn) {
 	}
 	storeFilePath := string(buffer[:n])
 
+	userId := strconv.Itoa(rand.Intn(10000000))
+
 	user := &User{
 		UserId:        userId,
 		Username:      username,
@@ -86,7 +83,7 @@ func (s *Server) HandleConnection(conn net.Conn) {
 	}
 
 	s.Mutex.Lock()
-	s.Connections[userId] = user
+	s.Connections[user.UserId] = user
 	s.Mutex.Unlock()
 
 	fmt.Printf("User connected: %s with file path: %s\n", username, storeFilePath)
