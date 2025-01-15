@@ -88,7 +88,11 @@ func main() {
 		}
 	}()
 
-	fmt.Println("You can start typing your messages. Use '/sendfile <userId> <filename>' to send a file. Type 'exit' to quit.")
+	fmt.Println("\nWelcome to the P2P File Sharing App!")
+	fmt.Println("-----------------------------------")
+	fmt.Println("You can start typing your messages.")
+	fmt.Println("Use '/sendfile <userId> <filename>' to send a file.")
+	fmt.Println("Type 'exit' to quit.")
 
 	for {
 		message, _ := reader.ReadString('\n')
@@ -133,6 +137,7 @@ func HandleSendFile(conn net.Conn, recipientId, filePath string) {
 	fileSize := fileInfo.Size()
 	fileName := fileInfo.Name()
 
+	fmt.Printf("Sending file '%s' to user %s...\n", fileName, recipientId)
 	// Send file request with file size
 	_, err = conn.Write([]byte(fmt.Sprintf("/FILE_REQUEST %s %s %d\n", recipientId, fileName, fileSize)))
 	if err != nil {
@@ -152,8 +157,7 @@ func HandleSendFile(conn net.Conn, recipientId, filePath string) {
 			break
 		}
 	}
-
-	fmt.Printf("Sent file request: %s (size: %d bytes)\n", fileName, fileSize)
+	fmt.Printf("File '%s' sent successfully!\n", fileName)
 }
 
 func HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize int64, fileData []byte, storeFilePath string) {
@@ -170,4 +174,7 @@ func HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize in
 		fmt.Println("error in write fileData", err)
 		return
 	}
+	fmt.Printf("Received file transfer response for: %s (Size: %d bytes)\n", fileName, fileSize)
+	fmt.Println("Starting file download...")
+	fmt.Printf("File %s successfully received and saved to %s\n", fileName, storeFilePath)
 }

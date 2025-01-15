@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 type Server struct {
@@ -136,8 +137,8 @@ func (s *Server) HandleConnection(conn net.Conn) {
 			s.Messages <- Message{
 				SenderId:       userId,
 				SenderUsername: username,
-				Content:        messageContent,
-				Timestamp:      "",
+				Content:        fmt.Sprintf("%s (Received at %s)", messageContent, time.Now().Format("15:04:05")),
+				Timestamp:      time.Now().Format("15:04:05"),
 			}
 		}
 	}
@@ -188,23 +189,21 @@ func (s *Server) SendFile(senderId, recipientId, filePath string) {
 func (s *Server) Broadcast() {
 	for message := range s.Messages {
 		s.Mutex.Lock()
-		// timestamp := time.Now().Format("15:04:05")
 		var sb strings.Builder
-		// sb.WriteString(timestamp)
-		sb.WriteString(" [")
-		sb.WriteString(strings.TrimSpace(message.SenderId))
-		sb.WriteString("]: ")
+		sb.WriteString("-> [")
+		sb.WriteString(strings.TrimSpace(message.SenderUsername))
+		sb.WriteString("] ")
 		sb.WriteString(strings.TrimSpace(message.Content))
-		sb.WriteString("\n")
 		formattedMsg := sb.String()
 
+		log.SetFlags(0) // Disable default timestamp in log
 		log.Print(formattedMsg)
-		for _, user := range s.Connections {
-			_, err := user.Conn.Write([]byte(formattedMsg))
-			if err != nil {
-				log.Printf("Error broadcasting message: %v", err)
-			}
-		}
+		// for _, user := range s.Connections {
+		// 	_, err := user.Conn.Write([]byte(formattedMsg))
+		// 	if err != nil {
+		// 		log.Printf("Error broadcasting message: %v", err)
+		// 	}
+		// }
 		s.Mutex.Unlock()
 	}
 }
