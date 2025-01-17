@@ -99,7 +99,15 @@ func (s *Server) HandleConnection(conn net.Conn) {
 		}
 
 		messageContent := string(buffer[:n])
-		if strings.HasPrefix(messageContent, "/sendfile") {
+		switch {
+		case messageContent == "/exit":
+			s.Mutex.Lock()
+			user.isOnline = false
+			delete(s.Connections, userId)
+			s.Mutex.Unlock()
+			s.BroadcastMessage(fmt.Sprintf("User %s is now offline", username))
+			return
+		case strings.HasPrefix(messageContent, "/sendfile"):
 			parts := strings.SplitN(messageContent, " ", 3)
 			if len(parts) < 3 {
 				_, _ = conn.Write([]byte("Usage: /sendfile <userId> <filename>\n"))
@@ -108,7 +116,8 @@ func (s *Server) HandleConnection(conn net.Conn) {
 			recipientId := parts[1]
 			filepath := parts[2]
 			s.SendFile(userId, recipientId, filepath)
-		} else if strings.HasPrefix(messageContent, "/FILE_REQUEST") {
+			continue
+		case strings.HasPrefix(messageContent, "/FILE_REQUEST"):
 			parts := strings.SplitN(messageContent, " ", 4)
 			if len(parts) < 4 {
 				_, _ = conn.Write([]byte("Usage: /FILE_REQUEST <userId> <filename> <filesize>\n"))
@@ -133,7 +142,7 @@ func (s *Server) HandleConnection(conn net.Conn) {
 			}
 			s.HandleFileTransfer(conn, recipientId, fileName, int64(fileSize), fileData)
 			continue
-		} else {
+		default:
 			s.Messages <- Message{
 				SenderId:       userId,
 				SenderUsername: username,
@@ -160,7 +169,7 @@ func (s *Server) BroadcastMessage(content string) {
 	}
 }
 
-func (s* Server) StartHeartBeat(interval time.Duration) {
+func (s *Server) StartHeartBeat(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	go func() {
 		for range ticker.C {
@@ -168,10 +177,10 @@ func (s* Server) StartHeartBeat(interval time.Duration) {
 			for _, user := range s.Connections {
 				if user.isOnline {
 					_, err := user.Conn.Write([]byte("PING\n"))
-		            if err != nil {
+					if err != nil {
 						fmt.Printf("User disconnected: %s\n", user.Username)
-                        user.isOnline = false
-                        s.BroadcastMessage(fmt.Sprintf("User %s is now offline", user.Username))
+						user.isOnline = false
+						s.BroadcastMessage(fmt.Sprintf("User %s is now offline", user.Username))
 					}
 				}
 			}

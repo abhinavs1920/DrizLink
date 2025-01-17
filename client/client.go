@@ -51,7 +51,8 @@ func main() {
 			}
 			message := string(buffer[:n])
 
-			if strings.HasPrefix(message, "/FILE_RESPONSE") {
+			switch {
+			case strings.HasPrefix(message, "/FILE_RESPONSE"):
 				fmt.Println("File transfer response received")
 				args := strings.SplitN(message, " ", 4)
 				if len(args) != 4 {
@@ -75,7 +76,7 @@ func main() {
 				}
 				HandleFileTransfer(conn, recipientId, fileName, int64(fileSize), fileData, storeFilePath)
 				continue
-			} else if strings.HasPrefix(message, "PING") {
+			case strings.HasPrefix(message, "PING"):
 				_, err = conn.Write([]byte("PONG\n"))
 				if err != nil {
 					fmt.Println("Error responding to heartbeat: ", err)
@@ -94,11 +95,12 @@ func main() {
 	for {
 		message, _ := reader.ReadString('\n')
 		message = strings.TrimSpace(message)
-		if message == "exit" {
+		switch {
+		case message == "exit":
 			fmt.Println("Goodbye!")
 			conn.Close()
 			return
-		} else if strings.HasPrefix(message, "/sendfile") {
+		case strings.HasPrefix(message, "/sendfile"):
 			args := strings.SplitN(message, " ", 3)
 			if len(args) != 3 {
 				fmt.Println("Invalid arguments. Use: /sendfile <userId> <filename>")
@@ -108,11 +110,12 @@ func main() {
 			filePath := args[2]
 			HandleSendFile(conn, recipientId, filePath)
 			continue
-		}
-		_, err = conn.Write([]byte(message))
-		if err != nil {
-			fmt.Println("error in write message", err)
-			return
+		default:
+			_, err = conn.Write([]byte(message))
+			if err != nil {
+				fmt.Println("error in write message", err)
+				return
+			}
 		}
 	}
 }
