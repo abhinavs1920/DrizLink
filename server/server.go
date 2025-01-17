@@ -31,6 +31,7 @@ type User struct {
 	Username      string
 	StoreFilePath string
 	Conn          net.Conn
+	isOnline      bool
 }
 
 func (s *Server) Start() {
@@ -80,13 +81,15 @@ func (s *Server) HandleConnection(conn net.Conn) {
 		Username:      username,
 		StoreFilePath: storeFilePath,
 		Conn:          conn,
+		isOnline:      true,
 	}
 
 	s.Mutex.Lock()
 	s.Connections[user.UserId] = user
 	s.Mutex.Unlock()
 
-	fmt.Printf("User connected: %s with file path: %s\n", username, storeFilePath)
+	fmt.Printf("User connected: %s\n", username)
+	s.BroadcastMessage(fmt.Sprintf("User %s is now Online", username))
 
 	for {
 		n, err := conn.Read(buffer)
@@ -141,8 +144,40 @@ func (s *Server) HandleConnection(conn net.Conn) {
 	}
 
 	s.Mutex.Lock()
+	user.isOnline = false
 	delete(s.Connections, userId)
 	s.Mutex.Unlock()
+	s.BroadcastMessage(fmt.Sprintf("User %s is now offline", username))
+}
+
+func (s *Server) BroadcastMessage(content string) {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
+	for _, user := range s.Connections {
+		if user.isOnline {
+			_, _ = user.Conn.Write([]byte(content + "\n"))
+		}
+	}
+}
+
+func (s* Server) StartHeartBeat(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	go func() {
+		for range ticker.C {
+			s.Mutex.Lock()
+			for _, user := range s.Connections {
+				if user.isOnline {
+					_, err := user.Conn.Write([]byte("PING\n"))
+		            if err != nil {
+						fmt.Printf("User disconnected: %s\n", user.Username)
+                        user.isOnline = false
+                        s.BroadcastMessage(fmt.Sprintf("User %s is now offline", user.Username))
+					}
+				}
+			}
+			s.Mutex.Unlock()
+		}
+	}()
 }
 
 func (s *Server) HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize int64, fileData []byte) {
@@ -213,5 +248,6 @@ func main() {
 	}
 
 	go server.Broadcast()
+	go server.StartHeartBeat(10 * time.Second)
 	server.Start()
 }

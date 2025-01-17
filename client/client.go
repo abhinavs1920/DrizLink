@@ -75,6 +75,12 @@ func main() {
 				}
 				HandleFileTransfer(conn, recipientId, fileName, int64(fileSize), fileData, storeFilePath)
 				continue
+			} else if strings.HasPrefix(message, "PING") {
+				_, err = conn.Write([]byte("PONG\n"))
+				if err != nil {
+					fmt.Println("Error responding to heartbeat: ", err)
+					return
+				}
 			}
 		}
 	}()
