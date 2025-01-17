@@ -110,6 +110,20 @@ func main() {
 			filePath := args[2]
 			HandleSendFile(conn, recipientId, filePath)
 			continue
+		case strings.HasPrefix(message, "/status"):
+			_, err := conn.Write([]byte(message))
+			if err != nil {
+				fmt.Println("error in write message", err)
+				return
+			}
+			buffer := make([]byte, 1024)
+			n, err := conn.Read(buffer)
+			if err != nil {
+				fmt.Println("error in read message", err)
+				return
+			}
+			fmt.Println(string(buffer[:n]))
+			continue
 		default:
 			_, err = conn.Write([]byte(message))
 			if err != nil {
