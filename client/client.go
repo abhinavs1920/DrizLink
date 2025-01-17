@@ -80,8 +80,17 @@ func main() {
 				_, err = conn.Write([]byte("PONG\n"))
 				if err != nil {
 					fmt.Println("Error responding to heartbeat: ", err)
-					return
+					continue
 				}
+			case message == "USERS:":
+				buffer := make([]byte, 1024)
+				n, err := conn.Read(buffer)
+				if err != nil {
+					fmt.Println("error in read message", err)
+					continue
+				}
+				fmt.Println(string(buffer[:n]))
+				continue
 			}
 		}
 	}()
@@ -114,15 +123,8 @@ func main() {
 			_, err := conn.Write([]byte(message))
 			if err != nil {
 				fmt.Println("error in write message", err)
-				return
+				continue
 			}
-			buffer := make([]byte, 1024)
-			n, err := conn.Read(buffer)
-			if err != nil {
-				fmt.Println("error in read message", err)
-				return
-			}
-			fmt.Println(string(buffer[:n]))
 			continue
 		default:
 			_, err = conn.Write([]byte(message))
