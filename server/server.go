@@ -103,7 +103,7 @@ func (s *Server) HandleConnection(conn net.Conn) {
 		case messageContent == "/exit":
 			s.Mutex.Lock()
 			user.isOnline = false
-			delete(s.Connections, userId)
+			// delete(s.Connections, userId)
 			s.Mutex.Unlock()
 			s.BroadcastMessage(fmt.Sprintf("User %s is now offline", username))
 			return
@@ -142,6 +142,31 @@ func (s *Server) HandleConnection(conn net.Conn) {
 			}
 			s.HandleFileTransfer(conn, recipientId, fileName, int64(fileSize), fileData)
 			continue
+		case strings.HasPrefix(messageContent, "/status"):
+			fmt.Println("Sending user list...")
+			_, err = conn.Write([]byte("USERS:"))
+			if err != nil {
+				fmt.Println("Error sending user list:", err)
+				return
+			}
+			for _, user := range s.Connections {
+				if user.isOnline {
+					_, err = conn.Write([]byte(fmt.Sprintf("%s is online\n", user.Username)))
+					if err != nil {
+						fmt.Println("Error sending user list:", err)
+						return
+					}
+					fmt.Printf("%s is online\n", user.Username)
+				} else {
+					_, err = conn.Write([]byte(fmt.Sprintf("%s is offline\n", user.Username)))
+					if err != nil {
+						fmt.Println("Error sending user list:", err)
+						return
+					}
+					fmt.Printf("%s is offline\n", user.Username)
+				}
+			}
+			continue
 		default:
 			s.Messages <- Message{
 				SenderId:       userId,
@@ -154,7 +179,7 @@ func (s *Server) HandleConnection(conn net.Conn) {
 
 	s.Mutex.Lock()
 	user.isOnline = false
-	delete(s.Connections, userId)
+	// delete(s.Connections, userId)
 	s.Mutex.Unlock()
 	s.BroadcastMessage(fmt.Sprintf("User %s is now offline", username))
 }
@@ -257,6 +282,6 @@ func main() {
 	}
 
 	go server.Broadcast()
-	go server.StartHeartBeat(10 * time.Second)
+	go server.StartHeartBeat(100 * time.Second)
 	server.Start()
 }
