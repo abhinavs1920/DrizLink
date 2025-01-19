@@ -88,7 +88,7 @@ func (s *Server) HandleConnection(conn net.Conn) {
 	s.Connections[user.UserId] = user
 	s.Mutex.Unlock()
 
-	fmt.Printf("User connected: %s\n", username)
+	fmt.Printf("User connected: %s with ID: %s\n", username, userId)
 	s.BroadcastMessage(fmt.Sprintf("User %s is now Online", username))
 
 	for {
@@ -107,16 +107,6 @@ func (s *Server) HandleConnection(conn net.Conn) {
 			s.Mutex.Unlock()
 			s.BroadcastMessage(fmt.Sprintf("User %s is now offline", username))
 			return
-		case strings.HasPrefix(messageContent, "/sendfile"):
-			parts := strings.SplitN(messageContent, " ", 3)
-			if len(parts) < 3 {
-				_, _ = conn.Write([]byte("Usage: /sendfile <userId> <filename>\n"))
-				continue
-			}
-			recipientId := parts[1]
-			filepath := parts[2]
-			s.SendFile(userId, recipientId, filepath)
-			continue
 		case strings.HasPrefix(messageContent, "/FILE_REQUEST"):
 			parts := strings.SplitN(messageContent, " ", 4)
 			if len(parts) < 4 {
