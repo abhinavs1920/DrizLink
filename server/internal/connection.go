@@ -2,8 +2,8 @@ package connection
 
 import (
 	"drizlink/server/interfaces"
+	"drizlink/server/internal/encryption"
 	"fmt"
-	"log"
 	"math/rand"
 	"net"
 	"strconv"
@@ -46,25 +46,36 @@ func Start(server *interfaces.Server) {
 }
 
 func HandleConnection(conn net.Conn, server *interfaces.Server) {
-	defer conn.Close()
-
 	buffer := make([]byte, 1024)
-
 	n, err := conn.Read(buffer)
 	if err != nil {
-		fmt.Println("Error reading User Name:", err)
+		fmt.Println("error in read username")
 		return
 	}
-	username := string(buffer[:n])
+	encryptedUsername := string(buffer[:n])
+	fmt.Println(encryptedUsername)
+	// Decrypt username
+	username, err := encryption.DecryptMessage(encryptedUsername)
+	if err != nil {
+		fmt.Println("error decrypting username:", err)
+		return
+	}
 
 	n, err = conn.Read(buffer)
 	if err != nil {
-		fmt.Println("Error reading Store File Path:", err)
+		fmt.Println("error in read storeFilePath")
 		return
 	}
-	storeFilePath := string(buffer[:n])
+	encryptedStoreFilePath := string(buffer[:n])
 
-	userId := strconv.Itoa(rand.Intn(10000000))
+	// Decrypt store file path
+	storeFilePath, err := encryption.DecryptMessage(encryptedStoreFilePath)
+	if err != nil {
+		fmt.Println("error decrypting storeFilePath:", err)
+		return
+	}
+
+	userId := generateUserId()
 
 	user := &interfaces.User{
 		UserId:        userId,
@@ -78,83 +89,106 @@ func HandleConnection(conn net.Conn, server *interfaces.Server) {
 	server.Connections[user.UserId] = user
 	server.Mutex.Unlock()
 
-	fmt.Printf("User connected: %s with ID: %s\n", username, userId)
-	BroadcastMessage(fmt.Sprintf("User %s is now Online", username), server)
+	// Encrypt and broadcast welcome message
+	welcomeMsg := fmt.Sprintf("User %s has joined the chat", username)
+	encryptedMsg, err := encryption.EncryptMessage(welcomeMsg)
+	if err == nil {
+		BroadcastMessage(encryptedMsg, server)
+	}
+
+	fmt.Printf("New user connected: %s (ID: %s)\n", username, userId)
 
 	for {
+		buffer := make([]byte, 1024)
 		n, err := conn.Read(buffer)
 		if err != nil {
 			fmt.Printf("User disconnected: %s\n", username)
-			break
+			server.Mutex.Lock()
+			user.IsOnline = false
+			server.Mutex.Unlock()
+			// Encrypt and broadcast offline message
+			offlineMsg := fmt.Sprintf("User %s is now offline", username)
+			encryptedOffline, err := encryption.EncryptMessage(offlineMsg)
+			if err == nil {
+				BroadcastMessage(encryptedOffline, server)
+			}
+			return
 		}
 
 		messageContent := string(buffer[:n])
+
+		// Try to decrypt the message if it's not a command
+		if !strings.HasPrefix(messageContent, "/") && messageContent != "PONG\n" {
+			decryptedMsg, err := encryption.DecryptMessage(messageContent)
+			if err == nil {
+				messageContent = decryptedMsg
+			}
+		}
+
 		switch {
 		case messageContent == "/exit":
 			server.Mutex.Lock()
 			user.IsOnline = false
-			// delete(s.Connections, userId)
 			server.Mutex.Unlock()
-			BroadcastMessage(fmt.Sprintf("User %s is now offline", username), server)
+			// Encrypt and broadcast offline message
+			offlineMsg := fmt.Sprintf("User %s is now offline", username)
+			encryptedOffline, err := encryption.EncryptMessage(offlineMsg)
+			if err == nil {
+				BroadcastMessage(encryptedOffline, server)
+			}
 			return
 		case strings.HasPrefix(messageContent, "/FILE_REQUEST"):
-			parts := strings.SplitN(messageContent, " ", 4)
-			if len(parts) < 4 {
-				_, _ = conn.Write([]byte("Usage: /FILE_REQUEST <userId> <filename> <filesize>\n"))
+			args := strings.SplitN(messageContent, " ", 4)
+			if len(args) != 4 {
+				fmt.Println("Invalid arguments. Use: /FILE_REQUEST <userId> <filename> <fileSize>")
 				continue
 			}
-			recipientId := parts[1]
-			fileName := parts[2]
-			fileSizeStr := strings.TrimSpace(parts[3])
+			recipientId := args[1]
+			fileName := args[2]
+			fileSizeStr := strings.TrimSpace(args[3])
 			fileSize, err := strconv.ParseInt(fileSizeStr, 10, 64)
-
 			if err != nil {
-				fmt.Printf("Invalid file size '%s': %v\n", fileSizeStr, err)
-				_, _ = conn.Write([]byte(fmt.Sprintf("Invalid file size: %s\n", fileSizeStr)))
+				fmt.Println("Invalid fileSize. Use: /FILE_REQUEST <userId> <filename> <fileSize>")
 				continue
 			}
-			HandleFileTransfer(server, conn, recipientId, fileName, int64(fileSize))
+
+			HandleFileTransfer(server, conn, recipientId, fileName, fileSize)
+			continue
+		case messageContent == "PONG\n":
 			continue
 		case strings.HasPrefix(messageContent, "/status"):
-			fmt.Println("Sending user list...")
 			_, err = conn.Write([]byte("USERS:"))
 			if err != nil {
-				fmt.Println("Error sending user list:", err)
-				return
+				fmt.Println("Error sending user list header:", err)
+				continue
 			}
 			for _, user := range server.Connections {
 				if user.IsOnline {
-					_, err = conn.Write([]byte(fmt.Sprintf("%s is online\n", user.Username)))
-					if err != nil {
-						fmt.Println("Error sending user list:", err)
-						return
+					// Encrypt user status message
+					statusMsg := fmt.Sprintf("%s is online\n", user.Username)
+					encryptedStatus, err := encryption.EncryptMessage(statusMsg)
+					if err == nil {
+						_, err = conn.Write([]byte(encryptedStatus))
+						if err != nil {
+							fmt.Println("Error sending user list:", err)
+							continue
+						}
 					}
-					fmt.Printf("%s is online\n", user.Username)
-				} else {
-					_, err = conn.Write([]byte(fmt.Sprintf("%s is offline\n", user.Username)))
-					if err != nil {
-						fmt.Println("Error sending user list:", err)
-						return
-					}
-					fmt.Printf("%s is offline\n", user.Username)
 				}
 			}
 			continue
 		default:
-			server.Messages <- interfaces.Message{
-				SenderId:       userId,
-				SenderUsername: username,
-				Content:        fmt.Sprintf("%s (Received at %s)", messageContent, time.Now().Format("15:04:05")),
-				Timestamp:      time.Now().Format("15:04:05"),
+			// Encrypt and broadcast regular messages
+			encryptedMsg, err := encryption.EncryptMessage(fmt.Sprintf("%s: %s", username, messageContent))
+			if err == nil {
+				BroadcastMessage(encryptedMsg, server)
 			}
 		}
 	}
+}
 
-	server.Mutex.Lock()
-	user.IsOnline = false
-	// delete(s.Connections, userId)
-	server.Mutex.Unlock()
-	BroadcastMessage(fmt.Sprintf("User %s is now offline", username), server)
+func generateUserId() string {
+	return strconv.Itoa(rand.Intn(10000000))
 }
 
 func BroadcastMessage(content string, server *interfaces.Server) {
@@ -164,28 +198,6 @@ func BroadcastMessage(content string, server *interfaces.Server) {
 		if user.IsOnline {
 			_, _ = user.Conn.Write([]byte(content + "\n"))
 		}
-	}
-}
-
-func Broadcast(server *interfaces.Server) {
-	for message := range server.Messages {
-		server.Mutex.Lock()
-		var sb strings.Builder
-		sb.WriteString("-> [")
-		sb.WriteString(strings.TrimSpace(message.SenderUsername))
-		sb.WriteString("] ")
-		sb.WriteString(strings.TrimSpace(message.Content))
-		formattedMsg := sb.String()
-
-		log.SetFlags(0) // Disable default timestamp in log
-		log.Print(formattedMsg)
-		// for _, user := range s.Connections {
-		// 	_, err := user.Conn.Write([]byte(formattedMsg))
-		// 	if err != nil {
-		// 		log.Printf("Error broadcasting message: %v", err)
-		// 	}
-		// }
-		server.Mutex.Unlock()
 	}
 }
 
