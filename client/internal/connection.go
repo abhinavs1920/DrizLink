@@ -2,6 +2,7 @@ package connection
 
 import (
 	"bufio"
+	"drizlink/client/internal/encryption"
 	"fmt"
 	"net"
 	"os"
@@ -12,7 +13,6 @@ import (
 func Connect(address string) (net.Conn, error) {
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
-		fmt.Println("Error connecting to server:", err)
 		return nil, err
 	}
 	return conn, nil
@@ -29,7 +29,14 @@ func UserInput(attribute string, conn net.Conn) {
 	input, _ := reader.ReadString('\n')
 	input = strings.TrimSpace(input)
 
-	_, err := conn.Write([]byte(input))
+	// Encrypt user input before sending
+	encryptedInput, err := encryption.EncryptMessage(input)
+	if err != nil {
+		fmt.Println("error encrypting " + attribute)
+		panic(err)
+	}
+
+	_, err = conn.Write([]byte(encryptedInput))
 	if err != nil {
 		fmt.Println("error in write " + attribute)
 		panic(err)
@@ -45,6 +52,14 @@ func ReadLoop(conn net.Conn) {
 			return
 		}
 		message := string(buffer[:n])
+
+		// Try to decrypt the message if it's not a special command
+		if !strings.HasPrefix(message, "/") && !strings.HasPrefix(message, "PING") {
+			decryptedMsg, err := encryption.DecryptMessage(message)
+			if err == nil {
+				message = decryptedMsg
+			}
+		}
 
 		switch {
 		case strings.HasPrefix(message, "/FILE_RESPONSE"):
@@ -79,8 +94,16 @@ func ReadLoop(conn net.Conn) {
 				fmt.Println("error in read message", err)
 				continue
 			}
-			fmt.Println(string(buffer[:n]))
+			userList := string(buffer[:n])
+			// Try to decrypt the user list
+			decryptedList, err := encryption.DecryptMessage(userList)
+			if err == nil {
+				userList = decryptedList
+			}
+			fmt.Println(userList)
 			continue
+		default:
+			fmt.Println(message)
 		}
 	}
 }
@@ -113,7 +136,13 @@ func WriteLoop(conn net.Conn) {
 			}
 			continue
 		default:
-			_, err := conn.Write([]byte(message))
+			// Encrypt the message before sending
+			encryptedMsg, err := encryption.EncryptMessage(message)
+			if err != nil {
+				fmt.Println("error encrypting message", err)
+				continue
+			}
+			_, err = conn.Write([]byte(encryptedMsg))
 			if err != nil {
 				fmt.Println("error in write message", err)
 				return
