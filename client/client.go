@@ -68,13 +68,7 @@ func main() {
 					continue
 				}
 
-				fileData := make([]byte, fileSize)
-				_, err = io.ReadFull(conn, fileData)
-				if err != nil {
-					fmt.Println("error in read fileData", err)
-					return
-				}
-				HandleFileTransfer(conn, recipientId, fileName, int64(fileSize), fileData, storeFilePath)
+				HandleFileTransfer(conn, recipientId, fileName, int64(fileSize), storeFilePath)
 				continue
 			case strings.HasPrefix(message, "PING"):
 				_, err = conn.Write([]byte("PONG\n"))
@@ -162,21 +156,19 @@ func HandleSendFile(conn net.Conn, recipientId, filePath string) {
 	}
 
 	// Stream file data in chunks using io.CopyN
-	bufferSize := int64(4096) // 4KB chunk size
-	for {
-		written, err := io.CopyN(conn, file, bufferSize)
-		if err != nil && err != io.EOF {
-			fmt.Println("error in write fileData", err)
-			return
-		}
-		if written == 0 {
-			break
-		}
+	n, err := io.CopyN(conn, file, fileSize)
+	if err != nil {
+		fmt.Println("error in write fileData", err)
+		return
 	}
-	fmt.Printf("File '%s' sent successfully!\n", fileName)
+	if n != fileSize {
+		fmt.Println("error in copy file", err)
+		return
+	}
+	fmt.Printf("File '%s' sent successfully with file size %d!\n", fileName, fileSize)
 }
 
-func HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize int64, fileData []byte, storeFilePath string) {
+func HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize int64, storeFilePath string) {
 	filePath := storeFilePath + string(os.PathSeparator) + fileName
 	file, err := os.Create(filePath)
 	if err != nil {
@@ -185,7 +177,7 @@ func HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize in
 	}
 	defer file.Close()
 
-	_, err = file.Write(fileData)
+	_, err = io.CopyN(file, conn, fileSize)
 	if err != nil {
 		fmt.Println("error in write fileData", err)
 		return
