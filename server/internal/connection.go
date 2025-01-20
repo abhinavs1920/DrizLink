@@ -53,7 +53,6 @@ func HandleConnection(conn net.Conn, server *interfaces.Server) {
 		return
 	}
 	encryptedUsername := string(buffer[:n])
-	fmt.Println(encryptedUsername)
 	// Decrypt username
 	username, err := encryption.DecryptMessage(encryptedUsername)
 	if err != nil {

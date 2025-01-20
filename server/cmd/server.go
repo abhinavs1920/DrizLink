@@ -13,7 +13,6 @@ func main() {
 		Messages:    make(chan interfaces.Message),
 	}
 
-	go connection.Broadcast(&server)
 	go connection.StartHeartBeat(100*time.Second, &server)
 	connection.Start(&server)
 }
