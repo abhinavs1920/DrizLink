@@ -123,14 +123,7 @@ func (s *Server) HandleConnection(conn net.Conn) {
 				_, _ = conn.Write([]byte(fmt.Sprintf("Invalid file size: %s\n", fileSizeStr)))
 				continue
 			}
-
-			fileData := make([]byte, fileSize)
-			_, err = io.ReadFull(conn, fileData)
-			if err != nil {
-				fmt.Printf("Error reading file data (expected %d bytes): %v\n", fileSize, err)
-				return
-			}
-			s.HandleFileTransfer(conn, recipientId, fileName, int64(fileSize), fileData)
+			s.HandleFileTransfer(conn, recipientId, fileName, int64(fileSize))
 			continue
 		case strings.HasPrefix(messageContent, "/status"):
 			fmt.Println("Sending user list...")
@@ -204,14 +197,18 @@ func (s *Server) StartHeartBeat(interval time.Duration) {
 	}()
 }
 
-func (s *Server) HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize int64, fileData []byte) {
+func (s *Server) HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize int64) {
 	recipient, exists := s.Connections[recipientId]
 	if exists {
 		_, err := recipient.Conn.Write([]byte(fmt.Sprintf("/FILE_RESPONSE %s %s %d\n", recipientId, fileName, fileSize)))
 		if err != nil {
 			fmt.Printf("Error sending file response to %s: %v\n", recipientId, err)
 		}
-		_, err = recipient.Conn.Write(fileData)
+		n, err := io.CopyN(recipient.Conn, conn, fileSize)
+		if err != nil {
+			fmt.Printf("Error receiving file from %s: %v\n", recipientId, err)
+		}
+		fmt.Printf("Received %d bytes from %s\n", n, recipientId)
 		if err != nil {
 			fmt.Printf("Error sending file to %s: %v\n", recipientId, err)
 		}
