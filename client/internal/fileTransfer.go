@@ -46,6 +46,7 @@ func HandleSendFile(conn net.Conn, recipientId, filePath string) {
 }
 
 func HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize int64, storeFilePath string) {
+	fmt.Printf("Received file transfer response for: %s (Size: %d bytes)\n", storeFilePath, fileSize)
 	filePath := storeFilePath + string(os.PathSeparator) + fileName
 	file, err := os.Create(filePath)
 	if err != nil {

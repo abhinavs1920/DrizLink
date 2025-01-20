@@ -49,8 +49,8 @@ func ReadLoop(conn net.Conn) {
 		switch {
 		case strings.HasPrefix(message, "/FILE_RESPONSE"):
 			fmt.Println("File transfer response received")
-			args := strings.SplitN(message, " ", 4)
-			if len(args) != 4 {
+			args := strings.SplitN(message, " ", 5)
+			if len(args) != 5 {
 				fmt.Println("Invalid arguments. Use: /FILE_RESPONSE <userId> <filename> <fileSize> <storeFilePath>")
 				continue
 			}
@@ -59,9 +59,8 @@ func ReadLoop(conn net.Conn) {
 			fileSizeStr := strings.TrimSpace(args[3])
 			fileSize, err := strconv.ParseInt(fileSizeStr, 10, 64)
 			storeFilePath := args[4]
-
 			if err != nil {
-				fmt.Println("Invalid fileSize. Use: /FILE_RESPONSE <userId> <filename> <fileSize>")
+				fmt.Println("Invalid fileSize. Use: /FILE_RESPONSE <userId> <filename> <fileSize> <storeFilePath>")
 				continue
 			}
 

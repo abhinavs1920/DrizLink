@@ -10,7 +10,7 @@ import (
 func HandleFileTransfer(server *interfaces.Server, conn net.Conn, recipientId, fileName string, fileSize int64) {
 	recipient, exists := server.Connections[recipientId]
 	if exists {
-		_, err := recipient.Conn.Write([]byte(fmt.Sprintf("/FILE_RESPONSE %s %s %d\n", recipientId, fileName, fileSize)))
+		_, err := recipient.Conn.Write([]byte(fmt.Sprintf("/FILE_RESPONSE %s %s %d %s", recipientId, fileName, fileSize, recipient.StoreFilePath)))
 		if err != nil {
 			fmt.Printf("Error sending file response to %s: %v\n", recipientId, err)
 		}
