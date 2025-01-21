@@ -8,6 +8,7 @@ import (
 type Server struct {
 	Address     string
 	Connections map[string]*User
+	IpAddresses map[string]*User
 	Messages    chan Message
 	Mutex       sync.Mutex
 }
@@ -25,4 +26,5 @@ type User struct {
 	StoreFilePath string
 	Conn          net.Conn
 	IsOnline      bool
+	IpAddress     string
 }
