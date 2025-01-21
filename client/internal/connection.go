@@ -3,11 +3,13 @@ package connection
 import (
 	"bufio"
 	"drizlink/client/internal/encryption"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func Connect(address string) (net.Conn, error) {
@@ -22,7 +24,25 @@ func Close(conn net.Conn) {
 	conn.Close()
 }
 
-func UserInput(attribute string, conn net.Conn) {
+func UserInput(attribute string, conn net.Conn) error {
+	// First check if we get a reconnection signal
+	buffer := make([]byte, 1024)
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	n, err := conn.Read(buffer)
+	conn.SetReadDeadline(time.Time{}) // Reset read deadline
+
+	if err == nil && n > 0 {
+		message := string(buffer[:n])
+		if strings.HasPrefix(message, "/RECONNECT") {
+			parts := strings.SplitN(message, " ", 4)
+			if len(parts) == 3 {
+				fmt.Printf("Welcome back %s!\n", parts[1])
+				return errors.New("reconnect")
+			}
+		}
+	}
+
+	// If no reconnection signal, proceed with normal user input
 	reader := bufio.NewReader(os.Stdin)
 
 	fmt.Println("Enter your " + attribute + ": ")
@@ -41,6 +61,8 @@ func UserInput(attribute string, conn net.Conn) {
 		fmt.Println("error in write " + attribute)
 		panic(err)
 	}
+
+	return nil
 }
 
 func ReadLoop(conn net.Conn) {
