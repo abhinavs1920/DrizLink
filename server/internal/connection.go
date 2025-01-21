@@ -46,6 +46,37 @@ func Start(server *interfaces.Server) {
 }
 
 func HandleConnection(conn net.Conn, server *interfaces.Server) {
+	ipAddr := conn.RemoteAddr().String()
+	ip := strings.Split(ipAddr, ":")[0]
+	fmt.Println("New connection from", ip)
+	if existingUser := server.IpAddresses[ip]; existingUser != nil {
+		fmt.Println("Connection already exists for IP:", ip)
+		// Send reconnection signal with existing user data
+		reconnectMsg := fmt.Sprintf("/RECONNECT %s %s", existingUser.Username, existingUser.StoreFilePath)
+		_, err := conn.Write([]byte(reconnectMsg))
+		if err != nil {
+			fmt.Println("Error sending reconnect signal:", err)
+			return
+		}
+
+		// Update connection and online status
+		server.Mutex.Lock()
+		existingUser.Conn = conn
+		existingUser.IsOnline = true
+		server.Mutex.Unlock()
+
+		// Encrypt and broadcast welcome back message
+		welcomeMsg := fmt.Sprintf("User %s has rejoined the chat", existingUser.Username)
+		encryptedMsg, err := encryption.EncryptMessage(welcomeMsg)
+		if err == nil {
+			BroadcastMessage(encryptedMsg, server)
+		}
+
+		// Start handling messages for the reconnected user
+		handleUserMessages(conn, existingUser, server)
+		return
+	}
+
 	buffer := make([]byte, 1024)
 	n, err := conn.Read(buffer)
 	if err != nil {
@@ -82,10 +113,12 @@ func HandleConnection(conn net.Conn, server *interfaces.Server) {
 		StoreFilePath: storeFilePath,
 		Conn:          conn,
 		IsOnline:      true,
+		IpAddress:     ip,
 	}
 
 	server.Mutex.Lock()
 	server.Connections[user.UserId] = user
+	server.IpAddresses[ip] = user
 	server.Mutex.Unlock()
 
 	// Encrypt and broadcast welcome message
@@ -97,16 +130,21 @@ func HandleConnection(conn net.Conn, server *interfaces.Server) {
 
 	fmt.Printf("New user connected: %s (ID: %s)\n", username, userId)
 
+	// Start handling messages for the new user
+	handleUserMessages(conn, user, server)
+}
+
+func handleUserMessages(conn net.Conn, user *interfaces.User, server *interfaces.Server) {
 	for {
 		buffer := make([]byte, 1024)
 		n, err := conn.Read(buffer)
 		if err != nil {
-			fmt.Printf("User disconnected: %s\n", username)
+			fmt.Printf("User disconnected: %s\n", user.Username)
 			server.Mutex.Lock()
 			user.IsOnline = false
 			server.Mutex.Unlock()
 			// Encrypt and broadcast offline message
-			offlineMsg := fmt.Sprintf("User %s is now offline", username)
+			offlineMsg := fmt.Sprintf("User %s is now offline", user.Username)
 			encryptedOffline, err := encryption.EncryptMessage(offlineMsg)
 			if err == nil {
 				BroadcastMessage(encryptedOffline, server)
@@ -130,7 +168,7 @@ func HandleConnection(conn net.Conn, server *interfaces.Server) {
 			user.IsOnline = false
 			server.Mutex.Unlock()
 			// Encrypt and broadcast offline message
-			offlineMsg := fmt.Sprintf("User %s is now offline", username)
+			offlineMsg := fmt.Sprintf("User %s is now offline", user.Username)
 			encryptedOffline, err := encryption.EncryptMessage(offlineMsg)
 			if err == nil {
 				BroadcastMessage(encryptedOffline, server)
@@ -178,7 +216,7 @@ func HandleConnection(conn net.Conn, server *interfaces.Server) {
 			continue
 		default:
 			// Encrypt and broadcast regular messages
-			encryptedMsg, err := encryption.EncryptMessage(fmt.Sprintf("%s: %s", username, messageContent))
+			encryptedMsg, err := encryption.EncryptMessage(fmt.Sprintf("%s: %s", user.Username, messageContent))
 			if err == nil {
 				BroadcastMessage(encryptedMsg, server)
 			}
