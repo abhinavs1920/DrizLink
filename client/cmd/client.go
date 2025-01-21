@@ -14,16 +14,28 @@ func main() {
 
 	defer connection.Close(conn)
 
-	connection.UserInput("Username", conn)
-	connection.UserInput("Store File Path", conn)
+	err = connection.UserInput("Username", conn)
+	if err != nil {
+		if err.Error() == "reconnect" {
+			// Skip store file path input for reconnecting users
+			goto startChat
+		}
+		panic(err)
+	}
 
-	go connection.ReadLoop(conn)
+	// Only ask for store file path for new connections
+	err = connection.UserInput("Store File Path", conn)
+	if err != nil {
+		panic(err)
+	}
 
+startChat:
 	fmt.Println("\nWelcome to the P2P File Sharing App!")
 	fmt.Println("-----------------------------------")
-	fmt.Println("You can start typing your messages.")
+	fmt.Println("Type '/status' to see online users.")
 	fmt.Println("Use '/sendfile <userId> <filename>' to send a file.")
 	fmt.Println("Type 'exit' to quit.")
 
+	go connection.ReadLoop(conn)
 	connection.WriteLoop(conn)
 }
