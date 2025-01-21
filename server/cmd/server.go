@@ -10,6 +10,7 @@ func main() {
 	server := interfaces.Server{
 		Address:     "localhost:8080",
 		Connections: make(map[string]*interfaces.User),
+		IpAddresses: make(map[string]*interfaces.User),
 		Messages:    make(chan interfaces.Message),
 	}
 
