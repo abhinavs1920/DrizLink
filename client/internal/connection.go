@@ -86,6 +86,24 @@ func ReadLoop(conn net.Conn) {
 
 			HandleFileTransfer(conn, recipientId, fileName, int64(fileSize), storeFilePath)
 			continue
+		case strings.HasPrefix(message, "/FOLDER_RESPONSE"):
+			fmt.Println("Folder transfer response received")
+			args := strings.SplitN(message, " ", 5)
+			if len(args) != 5 {
+				fmt.Println("Invalid arguments. Use: /FOLDER_RESPONSE <userId> <folderName> <folderSize> <storeFilePath>")
+				continue
+			}
+			recipientId := args[1]
+			folderName := args[2]
+			folderSizeStr := strings.TrimSpace(args[3])
+			folderSize, err := strconv.ParseInt(folderSizeStr, 10, 64)
+			storeFilePath := args[4]
+			if err != nil {
+				fmt.Println("Invalid folderSize. Use: /FOLDER_RESPONSE <userId> <folderName> <folderSize> <storeFilePath>")
+				continue
+			}
+			HandleFolderTransfer(conn, recipientId, folderName, folderSize, storeFilePath)
+			continue
 		case strings.HasPrefix(message, "PING"):
 			_, err = conn.Write([]byte("PONG\n"))
 			if err != nil {
@@ -127,6 +145,16 @@ func WriteLoop(conn net.Conn) {
 			recipientId := args[1]
 			filePath := args[2]
 			HandleSendFile(conn, recipientId, filePath)
+			continue
+		case strings.HasPrefix(message, "/sendfolder"):
+			args := strings.SplitN(message, " ", 3)
+			if len(args) != 3 {
+				fmt.Println("Invalid arguments. Use: /sendfolder <userId> <folderPath>")
+				continue
+			}
+			recipientId := args[1]
+			folderPath := args[2]
+			HandleSendFolder(conn, recipientId, folderPath)
 			continue
 		case strings.HasPrefix(message, "/status"):
 			_, err := conn.Write([]byte(message))
