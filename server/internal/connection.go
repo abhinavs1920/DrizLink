@@ -3,7 +3,6 @@ package connection
 import (
 	"drizlink/server/interfaces"
 	"fmt"
-	"math/rand"
 	"net"
 	"strconv"
 	"strings"
@@ -177,10 +176,6 @@ func handleUserMessages(conn net.Conn, user *interfaces.User, server *interfaces
 			BroadcastMessage(messageContent, server, user)
 		}
 	}
-}
-
-func generateUserId() string {
-	return strconv.Itoa(rand.Intn(10000000))
 }
 
 func BroadcastMessage(content string, server *interfaces.Server, sender *interfaces.User) {
