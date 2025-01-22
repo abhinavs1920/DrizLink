@@ -1,6 +1,7 @@
 package connection
 
 import (
+	helper "drizlink"
 	"drizlink/server/interfaces"
 	"fmt"
 	"net"
@@ -87,7 +88,7 @@ func HandleConnection(conn net.Conn, server *interfaces.Server) {
 	}
 	storeFilePath := string(buffer[:n])
 
-	userId := generateUserId()
+	userId := helper.GenerateUserId()
 
 	user := &interfaces.User{
 		UserId:        userId,
@@ -152,6 +153,23 @@ func handleUserMessages(conn net.Conn, user *interfaces.User, server *interfaces
 			}
 
 			HandleFileTransfer(server, conn, recipientId, fileName, fileSize)
+			continue
+		case strings.HasPrefix(messageContent, "/FOLDER_REQUEST"):
+			args := strings.SplitN(messageContent, " ", 4)
+			if len(args) != 4 {
+				fmt.Println("Invalid arguments. Use: /FOLDER_REQUEST <userId> <folderName> <folderSize>")
+				continue
+			}
+			recipientId := args[1]
+			folderName := args[2]
+			folderSizeStr := strings.TrimSpace(args[3])
+			folderSize, err := strconv.ParseInt(folderSizeStr, 10, 64)
+			if err != nil {
+				fmt.Println("Invalid folderSize. Use: /FOLDER_REQUEST <userId> <folderName> <folderSize>")
+				continue
+			}
+
+			HandleFolderTransfer(server, conn, recipientId, folderName, folderSize)
 			continue
 		case messageContent == "PONG\n":
 			continue
