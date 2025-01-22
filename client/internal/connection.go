@@ -2,7 +2,6 @@ package connection
 
 import (
 	"bufio"
-	"drizlink/client/internal/encryption"
 	"errors"
 	"fmt"
 	"net"
@@ -49,14 +48,7 @@ func UserInput(attribute string, conn net.Conn) error {
 	input, _ := reader.ReadString('\n')
 	input = strings.TrimSpace(input)
 
-	// Encrypt user input before sending
-	encryptedInput, err := encryption.EncryptMessage(input)
-	if err != nil {
-		fmt.Println("error encrypting " + attribute)
-		panic(err)
-	}
-
-	_, err = conn.Write([]byte(encryptedInput))
+	_, err = conn.Write([]byte(input))
 	if err != nil {
 		fmt.Println("error in write " + attribute)
 		panic(err)
@@ -74,15 +66,6 @@ func ReadLoop(conn net.Conn) {
 			return
 		}
 		message := string(buffer[:n])
-
-		// Try to decrypt the message if it's not a special command
-		if !strings.HasPrefix(message, "/") && !strings.HasPrefix(message, "PING") {
-			decryptedMsg, err := encryption.DecryptMessage(message)
-			if err == nil {
-				message = decryptedMsg
-			}
-		}
-
 		switch {
 		case strings.HasPrefix(message, "/FILE_RESPONSE"):
 			fmt.Println("File transfer response received")
@@ -117,11 +100,6 @@ func ReadLoop(conn net.Conn) {
 				continue
 			}
 			userList := string(buffer[:n])
-			// Try to decrypt the user list
-			decryptedList, err := encryption.DecryptMessage(userList)
-			if err == nil {
-				userList = decryptedList
-			}
 			fmt.Println(userList)
 			continue
 		default:
@@ -158,13 +136,7 @@ func WriteLoop(conn net.Conn) {
 			}
 			continue
 		default:
-			// Encrypt the message before sending
-			encryptedMsg, err := encryption.EncryptMessage(message)
-			if err != nil {
-				fmt.Println("error encrypting message", err)
-				continue
-			}
-			_, err = conn.Write([]byte(encryptedMsg))
+			_, err := conn.Write([]byte(message))
 			if err != nil {
 				fmt.Println("error in write message", err)
 				return
