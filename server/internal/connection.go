@@ -1,7 +1,7 @@
 package connection
 
 import (
-	helper "drizlink"
+	"drizlink/helper"
 	"drizlink/server/interfaces"
 	"fmt"
 	"net"

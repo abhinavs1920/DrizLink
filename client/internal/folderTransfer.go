@@ -1,7 +1,7 @@
 package connection
 
 import (
-	helper "drizlink"
+	"drizlink/helper"
 	"fmt"
 	"io"
 	"net"
@@ -11,12 +11,12 @@ import (
 
 func HandleSendFolder(conn net.Conn, recipientId, folderPath string) {
 	//Create a temperoroy zip file
-	tempZipPath := folderPath+".zip"
+	tempZipPath := folderPath + ".zip"
 	err := helper.CreateZipFromFolder(folderPath, tempZipPath)
 	if err != nil {
 		fmt.Printf("Error creating zip file: ", err)
 	}
-	defer os.Remove(tempZipPath)  //clean up temporary zip file
+	defer os.Remove(tempZipPath) //clean up temporary zip file
 
 	//open zip file
 	zipFile, err := os.Open(tempZipPath)
@@ -28,7 +28,7 @@ func HandleSendFolder(conn net.Conn, recipientId, folderPath string) {
 	defer zipFile.Close()
 
 	//Get zip file info
-    zipInfo ,err := zipFile.Stat()
+	zipInfo, err := zipFile.Stat()
 	if err != nil {
 		fmt.Printf("Error getting zip file info: ", err)
 		return
@@ -77,9 +77,9 @@ func HandleFolderTransfer(conn net.Conn, recipientId, folderName string, folderS
 		fmt.Printf("Error receiving folder data: %v\n", err)
 		return
 	}
-    zipFile.Close()
+	zipFile.Close()
 
-	if n!= folderSize {
+	if n != folderSize {
 		os.Remove(tempZipPath)
 		fmt.Printf("Error: received %d bytes, expected %d bytes\n", n, folderSize)
 		return
