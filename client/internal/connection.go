@@ -156,6 +156,15 @@ func WriteLoop(conn net.Conn) {
 			folderPath := args[2]
 			HandleSendFolder(conn, recipientId, folderPath)
 			continue
+		case strings.HasPrefix(message, "/lookup"):
+			args := strings.SplitN(message, " ", 2)
+			if len(args) != 2 {
+				fmt.Println("Invalid arguments. Use: /lookup <userId>")
+				continue
+			}
+			recipientId := args[1]
+			HandleLookup(conn, recipientId)
+			continue
 		case strings.HasPrefix(message, "/status"):
 			_, err := conn.Write([]byte(message))
 			if err != nil {
