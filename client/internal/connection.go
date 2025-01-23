@@ -163,7 +163,7 @@ func WriteLoop(conn net.Conn) {
 				continue
 			}
 			recipientId := args[1]
-			HandleLookup(conn, recipientId)
+			HandleLookupRequest(conn, recipientId)
 			continue
 		case strings.HasPrefix(message, "/status"):
 			_, err := conn.Write([]byte(message))

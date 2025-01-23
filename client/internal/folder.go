@@ -98,3 +98,11 @@ func HandleFolderTransfer(conn net.Conn, recipientId, folderName string, folderS
 	os.Remove(tempZipPath)
 	fmt.Printf("Folder '%s' received and extracted successfully!\n", folderName)
 }
+
+func HandleLookupRequest(conn net.Conn, userId string) {
+	_, err := conn.Write([]byte(fmt.Sprintf("/LOOK %s\n", userId)))
+	if err != nil {
+		fmt.Printf("Error sending look request: %v\n", err)
+		return
+	}
+}
