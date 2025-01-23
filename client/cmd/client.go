@@ -6,10 +6,13 @@ import (
 )
 
 func main() {
-	conn, err := connection.Connect("localhost:8080")
+	conn, err := connection.Connect("192.168.65.7:8080")
 	if err != nil {
-		fmt.Println("error in dial")
-		panic(err)
+		if err.Error() == "reconnect" {
+			goto startChat
+		} else {
+			panic(err)
+		}
 	}
 
 	defer connection.Close(conn)
@@ -17,16 +20,20 @@ func main() {
 	err = connection.UserInput("Username", conn)
 	if err != nil {
 		if err.Error() == "reconnect" {
-			// Skip store file path input for reconnecting users
 			goto startChat
+		} else {
+			panic(err)
 		}
-		panic(err)
 	}
 
 	// Only ask for store file path for new connections
 	err = connection.UserInput("Store File Path", conn)
 	if err != nil {
-		panic(err)
+		if err.Error() == "reconnect" {
+			goto startChat
+		} else {
+			panic(err)
+		}
 	}
 
 startChat:
