@@ -190,6 +190,15 @@ func handleUserMessages(conn net.Conn, user *interfaces.User, server *interfaces
 				}
 			}
 			continue
+		case strings.HasPrefix(messageContent, "/LOOK"):
+			args := strings.SplitN(messageContent, " ", 2)
+			if len(args) != 2 {
+				fmt.Println("Invalid arguments. Use: /LOOK <userId>")
+				continue
+			}
+			recipientId := args[1]
+			HandleLookupRequest(server, conn, recipientId)
+			continue
 		default:
 			BroadcastMessage(messageContent, server, user)
 		}

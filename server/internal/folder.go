@@ -28,3 +28,25 @@ func HandleFolderTransfer(server *interfaces.Server, conn net.Conn, recipientId,
 		fmt.Printf("User %s not found\n", recipientId)
 	}
 }
+
+func HandleLookupRequest(server *interfaces.Server, conn net.Conn, userId string) {
+	recipient, exists := server.Connections[userId]
+	if exists {
+		if !recipient.IsOnline {
+			fmt.Printf("User %s is not online\n", userId)
+			_, err := conn.Write([]byte(fmt.Sprintf("User is not online %s\n", userId)))
+			if err != nil {
+				fmt.Printf("Error sending lookup response: %v\n", err)
+				return
+			}
+			return
+		}
+	} else {
+		fmt.Printf("User %s not found\n", userId)
+		_, err := conn.Write([]byte(fmt.Sprintf("User %s not found\n", userId)))
+		if err != nil {
+			fmt.Printf("Error sending lookup response: %v\n", err)
+			return
+		}
+	}
+}
