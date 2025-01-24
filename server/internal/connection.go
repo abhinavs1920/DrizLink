@@ -196,8 +196,18 @@ func handleUserMessages(conn net.Conn, user *interfaces.User, server *interfaces
 				fmt.Println("Invalid arguments. Use: /LOOK <userId>")
 				continue
 			}
-			recipientId := args[1]
+			recipientId := strings.TrimSpace(args[1])
 			HandleLookupRequest(server, conn, recipientId)
+			continue
+		case strings.HasPrefix(messageContent, "/DIR_LISTING"):
+			args := strings.SplitN(messageContent, " ", 3)
+			if len(args) != 3 {
+				fmt.Println("Invalid arguments. Use: /DIR_LISTING <userId> <files>")
+				continue
+			}
+			userId := strings.TrimSpace(args[1])
+			files := strings.TrimSpace(args[2])
+			HandleLookupResponse(server, conn, userId, strings.Split(files, " "))
 			continue
 		default:
 			BroadcastMessage(messageContent, server, user)
