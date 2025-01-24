@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func HandleSendFolder(conn net.Conn, recipientId, folderPath string) {
@@ -104,5 +105,96 @@ func HandleLookupRequest(conn net.Conn, userId string) {
 	if err != nil {
 		fmt.Printf("Error sending look request: %v\n", err)
 		return
+	}
+}
+
+func HandleLookupResponse(conn net.Conn, storeFilePath string, userId string) {
+	// Clean and normalize the path
+	cleanPath := filepath.Clean(strings.TrimSpace(storeFilePath))
+	absPath, err := filepath.Abs(cleanPath)
+	if err != nil {
+		fmt.Printf("Error resolving absolute path: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Processing directory: %s\n", absPath)
+
+	// Verify directory exists and is accessible
+	info, err := os.Stat(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Printf("Store directory does not exist: %s\n", absPath)
+		} else {
+			fmt.Printf("Error accessing directory: %v\n", err)
+		}
+		return
+	}
+
+	if !info.IsDir() {
+		fmt.Printf("Path is not a directory: %s\n", absPath)
+		return
+	}
+
+	var folders []string
+	var files []string
+
+	err = filepath.Walk(absPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			fmt.Printf("Error accessing path %s: %v\n", path, err)
+			return nil
+		}
+		if path == absPath {
+			return nil
+		}
+
+		// Get clean relative path
+		relPath, err := filepath.Rel(absPath, path)
+		if err != nil {
+			fmt.Printf("Error getting relative path for %s: %v\n", path, err)
+			return nil
+		}
+
+		// Clean up the path for better readability
+		cleanPath := filepath.ToSlash(relPath) // Convert to forward slashes
+		if info.IsDir() {
+			folders = append(folders, fmt.Sprintf("[FOLDER] %s (Size: %d bytes)", cleanPath, info.Size()))
+		} else {
+			files = append(files, fmt.Sprintf("[FILE] %s (Size: %d bytes)", cleanPath, info.Size()))
+		}
+		return nil
+	})
+
+	if err != nil {
+		fmt.Printf("Error walking directory: %v\n", err)
+		return
+	}
+
+	var allEntries []string
+	if len(folders) > 0 {
+		allEntries = append(allEntries, "=== FOLDERS ===")
+		allEntries = append(allEntries, folders...)
+	}
+	if len(files) > 0 {
+		if len(allEntries) > 0 {
+			allEntries = append(allEntries, "") // Add spacing between folders and files
+		}
+		allEntries = append(allEntries, "=== FILES ===")
+		allEntries = append(allEntries, files...)
+	}
+
+	if len(allEntries) == 0 {
+		allEntries = append(allEntries, "Directory is empty")
+	}
+
+	response := fmt.Sprintf("LOOK_RESPONSE %s %s\n", userId, strings.Join(allEntries, "\n"))
+	_, err = conn.Write([]byte(response))
+	if err != nil {
+		fmt.Printf("Error sending lookup response: %v\n", err)
+	}
+
+	// Print locally for debugging
+	fmt.Println("\nDirectory Contents:")
+	for _, entry := range allEntries {
+		fmt.Println(entry)
 	}
 }
