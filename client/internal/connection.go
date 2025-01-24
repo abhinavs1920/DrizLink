@@ -120,6 +120,39 @@ func ReadLoop(conn net.Conn) {
 			userList := string(buffer[:n])
 			fmt.Println(userList)
 			continue
+		case strings.HasPrefix(message, "/LOOK_REQUEST"):
+			args := strings.SplitN(message, " ", 3)
+			if len(args) != 3 {
+				fmt.Println("Invalid arguments. Use: /LOOK_REQUEST <storageFilePath> <userId>")
+				continue
+			}
+			storageFilePath := args[2]
+			userId := args[1]
+			HandleLookupResponse(conn, storageFilePath, userId)
+			continue
+		case strings.HasPrefix(message, "/LOOK_RESPONSE"):
+			args := strings.SplitN(message, " ", 3)
+			if len(args) != 3 {
+				fmt.Println("Invalid arguments. Use: /LOOK_RESPONSE <userId> <files>")
+				continue
+			}
+			userId := args[1]
+			files := strings.Split(args[2], " ")
+
+			fmt.Println("\n----------------------------")
+			fmt.Printf(" Directory Listing for User: %s\n", userId)
+			fmt.Println("----------------------------")
+
+			for _, file := range files {
+				if strings.HasSuffix(file, "/") {
+					fmt.Printf("📁 %s\n", file) // Folder display with emoji
+				} else {
+					fmt.Printf("  📄 %s\n", file) // File display with emoji
+				}
+			}
+
+			fmt.Println("----------------------------\n")
+			continue
 		default:
 			fmt.Println(message)
 		}
