@@ -205,6 +205,16 @@ func WriteLoop(conn net.Conn) {
 				continue
 			}
 			continue
+		case strings.HasPrefix(message, "/download"):
+			args := strings.SplitN(message, " ", 3)
+			if len(args) != 3 {
+				fmt.Println("Invalid arguments. Use: /download <userId> <filename>")
+				continue
+			}
+			recipientId := args[1]
+			filePath := args[2]
+			HandleDownloadRequest(conn, recipientId, filePath)
+			continue
 		default:
 			_, err := conn.Write([]byte(message))
 			if err != nil {
