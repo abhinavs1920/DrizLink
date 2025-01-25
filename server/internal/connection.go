@@ -209,6 +209,17 @@ func handleUserMessages(conn net.Conn, user *interfaces.User, server *interfaces
 			files := strings.TrimSpace(args[2])
 			HandleLookupResponse(server, conn, userId, strings.Split(files, " "))
 			continue
+		case strings.HasPrefix(messageContent, "/DOWNLOAD_REQUEST"):
+			args := strings.SplitN(messageContent, " ", 3)
+			if len(args) != 3 {
+				fmt.Println("Invalid arguments. Use: /DOWNLOAD_REQUEST <userId> <filename>")
+				continue
+			}
+			senderId := strings.TrimSpace(args[1])
+			recipientId := user.UserId
+			filePath := strings.TrimSpace(args[2])
+			HandleDownloadRequest(server, conn, senderId, recipientId, filePath)
+			continue
 		default:
 			BroadcastMessage(messageContent, server, user)
 		}
