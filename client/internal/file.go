@@ -5,6 +5,8 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 func HandleSendFile(conn net.Conn, recipientId, filePath string) {
@@ -72,4 +74,24 @@ func HandleDownloadRequest(conn net.Conn, recipientId, filePath string) {
 		return
 	}
 	fmt.Println("File download request sent successfully")
+}
+
+func HandleDownloadResponse(conn net.Conn, userId, filePath string) {
+	cleanPath := filepath.Clean(strings.TrimSpace(filePath))
+	absPath, err := filepath.Abs(cleanPath)
+	if err != nil {
+		fmt.Printf("Error resolving absolute path: %v\n", err)
+		return
+	}
+
+	fileInfo, err := os.Stat(absPath)
+	if err != nil {
+		fmt.Println("error in stat file", err)
+		return
+	}
+	if !fileInfo.IsDir() {
+		HandleSendFile(conn, userId, absPath)
+	} else {
+		HandleSendFolder(conn, userId, absPath)
+	}
 }

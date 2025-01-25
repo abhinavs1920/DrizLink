@@ -153,6 +153,16 @@ func ReadLoop(conn net.Conn) {
 
 			fmt.Println("----------------------------\n")
 			continue
+		case strings.HasPrefix(message, "/DOWNLOAD_REQUEST"):
+			args := strings.SplitN(message, " ", 3)
+			if len(args) != 3 {
+				fmt.Println("Invalid arguments. Use: /DOWNLOAD_REQUEST <userId> <filename>")
+				continue
+			}
+			userId := args[1]
+			filePath := args[2]
+			HandleDownloadResponse(conn, userId, filePath)
+			continue
 		default:
 			fmt.Println(message)
 		}
