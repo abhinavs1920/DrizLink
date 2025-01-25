@@ -117,8 +117,6 @@ func HandleLookupResponse(conn net.Conn, storeFilePath string, userId string) {
 		return
 	}
 
-	fmt.Printf("Processing directory: %s\n", absPath)
-
 	// Verify directory exists and is accessible
 	info, err := os.Stat(absPath)
 	if err != nil {
@@ -148,18 +146,12 @@ func HandleLookupResponse(conn net.Conn, storeFilePath string, userId string) {
 		}
 
 		// Get clean relative path
-		relPath, err := filepath.Rel(absPath, path)
-		if err != nil {
-			fmt.Printf("Error getting relative path for %s: %v\n", path, err)
-			return nil
-		}
+		absolutePath := filepath.ToSlash(path)
 
-		// Clean up the path for better readability
-		cleanPath := filepath.ToSlash(relPath) // Convert to forward slashes
 		if info.IsDir() {
-			folders = append(folders, fmt.Sprintf("[FOLDER] %s (Size: %d bytes)", cleanPath, info.Size()))
+			folders = append(folders, fmt.Sprintf("[FOLDER] %s (Size: %d bytes)", absolutePath, info.Size()))
 		} else {
-			files = append(files, fmt.Sprintf("[FILE] %s (Size: %d bytes)", cleanPath, info.Size()))
+			files = append(files, fmt.Sprintf("[FILE] %s (Size: %d bytes)", absolutePath, info.Size()))
 		}
 		return nil
 	})
@@ -192,8 +184,6 @@ func HandleLookupResponse(conn net.Conn, storeFilePath string, userId string) {
 		fmt.Printf("Error sending lookup response: %v\n", err)
 	}
 
-	// Print locally for debugging
-	fmt.Println("\nDirectory Contents:")
 	for _, entry := range allEntries {
 		fmt.Println(entry)
 	}
