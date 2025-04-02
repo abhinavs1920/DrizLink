@@ -2,6 +2,7 @@ package connection
 
 import (
 	"bufio"
+	"drizlink/utils"
 	"errors"
 	"fmt"
 	"net"
@@ -62,16 +63,16 @@ func ReadLoop(conn net.Conn) {
 		buffer := make([]byte, 1024)
 		n, err := conn.Read(buffer)
 		if err != nil {
-			fmt.Println("error in read")
+			fmt.Println(utils.ErrorColor("❌ Connection lost:"), err)
 			return
 		}
 		message := string(buffer[:n])
 		switch {
 		case strings.HasPrefix(message, "/FILE_RESPONSE"):
-			fmt.Println("File transfer response received")
+			fmt.Println(utils.InfoColor("📥 File transfer starting..."))
 			args := strings.SplitN(message, " ", 5)
 			if len(args) != 5 {
-				fmt.Println("Invalid arguments. Use: /FILE_RESPONSE <userId> <filename> <fileSize> <storeFilePath>")
+				fmt.Println(utils.ErrorColor("❌ Invalid arguments. Use: /FILE_RESPONSE <userId> <filename> <fileSize> <storeFilePath>"))
 				continue
 			}
 			recipientId := args[1]
@@ -80,17 +81,17 @@ func ReadLoop(conn net.Conn) {
 			fileSize, err := strconv.ParseInt(fileSizeStr, 10, 64)
 			storeFilePath := args[4]
 			if err != nil {
-				fmt.Println("Invalid fileSize. Use: /FILE_RESPONSE <userId> <filename> <fileSize> <storeFilePath>")
+				fmt.Println(utils.ErrorColor("❌ Invalid fileSize. Use: /FILE_RESPONSE <userId> <filename> <fileSize> <storeFilePath>"))
 				continue
 			}
 
 			HandleFileTransfer(conn, recipientId, fileName, int64(fileSize), storeFilePath)
 			continue
 		case strings.HasPrefix(message, "/FOLDER_RESPONSE"):
-			fmt.Println("Folder transfer response received")
+			fmt.Println(utils.InfoColor("📥 Folder transfer starting..."))
 			args := strings.SplitN(message, " ", 5)
 			if len(args) != 5 {
-				fmt.Println("Invalid arguments. Use: /FOLDER_RESPONSE <userId> <folderName> <folderSize> <storeFilePath>")
+				fmt.Println(utils.ErrorColor("❌ Invalid arguments. Use: /FOLDER_RESPONSE <userId> <folderName> <folderSize> <storeFilePath>"))
 				continue
 			}
 			recipientId := args[1]
@@ -99,7 +100,7 @@ func ReadLoop(conn net.Conn) {
 			folderSize, err := strconv.ParseInt(folderSizeStr, 10, 64)
 			storeFilePath := args[4]
 			if err != nil {
-				fmt.Println("Invalid folderSize. Use: /FOLDER_RESPONSE <userId> <folderName> <folderSize> <storeFilePath>")
+				fmt.Println(utils.ErrorColor("❌ Invalid folderSize. Use: /FOLDER_RESPONSE <userId> <folderName> <folderSize> <storeFilePath>"))
 				continue
 			}
 			HandleFolderTransfer(conn, recipientId, folderName, folderSize, storeFilePath)
@@ -107,64 +108,106 @@ func ReadLoop(conn net.Conn) {
 		case strings.HasPrefix(message, "PING"):
 			_, err = conn.Write([]byte("PONG\n"))
 			if err != nil {
-				fmt.Println("Error responding to heartbeat: ", err)
+				fmt.Println(utils.ErrorColor("❌ Error responding to heartbeat:"), err)
 				continue
 			}
 		case message == "USERS:":
-			buffer := make([]byte, 1024)
-			n, err := conn.Read(buffer)
-			if err != nil {
-				fmt.Println("error in read message", err)
-				continue
+			// Improved approach to accumulate the complete user list
+			fmt.Println(utils.HeaderColor("\n👥 Online Users:"))
+			fmt.Println(utils.InfoColor("-------------------"))
+			
+			// Read the complete user list with timeout
+			userList := ""
+			tempBuf := make([]byte, 1024)
+			conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+			
+			for {
+				m, err := conn.Read(tempBuf)
+				if err != nil {
+					break // Break on error (likely timeout)
+				}
+				userList += string(tempBuf[:m])
+				if m < 1024 {
+					break // All data received
+				}
 			}
-			userList := string(buffer[:n])
-			fmt.Println(userList)
+			
+			// Reset the deadline
+			conn.SetReadDeadline(time.Time{})
+			
+			// Process users
+			userCount := 0
+			for _, line := range strings.Split(userList, "\n") {
+				if strings.TrimSpace(line) != "" {
+					userCount++
+					fmt.Println(utils.SuccessColor(" • "), utils.UserColor(line))
+				}
+			}
+			
+			if userCount == 0 {
+				fmt.Println(utils.InfoColor(" No users currently online"))
+			}
+			
+			fmt.Println(utils.InfoColor("-------------------"))
 			continue
 		case strings.HasPrefix(message, "/LOOK_REQUEST"):
 			args := strings.SplitN(message, " ", 3)
 			if len(args) != 3 {
-				fmt.Println("Invalid arguments. Use: /LOOK_REQUEST <storageFilePath> <userId>")
+				fmt.Println(utils.ErrorColor("❌ Invalid arguments. Use: /LOOK_REQUEST <storageFilePath> <userId>"))
 				continue
 			}
 			storageFilePath := args[2]
 			userId := args[1]
+			fmt.Println(utils.InfoColor("🔍 Processing directory lookup request from"), utils.UserColor(userId))
 			HandleLookupResponse(conn, storageFilePath, userId)
 			continue
 		case strings.HasPrefix(message, "/LOOK_RESPONSE"):
 			args := strings.SplitN(message, " ", 3)
 			if len(args) != 3 {
-				fmt.Println("Invalid arguments. Use: /LOOK_RESPONSE <userId> <files>")
+				fmt.Println(utils.ErrorColor("❌ Invalid arguments. Use: /LOOK_RESPONSE <userId> <files>"))
 				continue
 			}
 			userId := args[1]
 			files := strings.Split(args[2], " ")
 
-			fmt.Println("\n----------------------------")
-			fmt.Printf(" Directory Listing for User: %s\n", userId)
-			fmt.Println("----------------------------")
+			fmt.Println(utils.HeaderColor("\n📂 Directory Listing for User:"), utils.UserColor(userId))
+			fmt.Println(utils.InfoColor("-------------------------------------------"))
 
 			for _, file := range files {
-				if strings.HasSuffix(file, "/") {
-					fmt.Printf("📁 %s\n", file) // Folder display with emoji
+				if strings.HasPrefix(file, "[FOLDER]") {
+					fmt.Println(utils.WarningColor("📁"), utils.InfoColor(file))
+				} else if strings.HasPrefix(file, "[FILE]") {
+					fmt.Println(utils.SuccessColor("📄"), utils.InfoColor(file))
+				} else if strings.HasPrefix(file, "===") {
+					fmt.Println(utils.HeaderColor(file))
 				} else {
-					fmt.Printf("  📄 %s\n", file) // File display with emoji
+					fmt.Println(utils.InfoColor(file))
 				}
 			}
 
-			fmt.Println("----------------------------\n")
+			fmt.Println(utils.InfoColor("-------------------------------------------\n"))
 			continue
 		case strings.HasPrefix(message, "/DOWNLOAD_REQUEST"):
 			args := strings.SplitN(message, " ", 3)
 			if len(args) != 3 {
-				fmt.Println("Invalid arguments. Use: /DOWNLOAD_REQUEST <userId> <filename>")
+				fmt.Println(utils.ErrorColor("❌ Invalid arguments. Use: /DOWNLOAD_REQUEST <userId> <filename>"))
 				continue
 			}
 			userId := args[1]
 			filePath := args[2]
+			fmt.Println(utils.InfoColor("📤 Download request from"), utils.UserColor(userId), utils.InfoColor("for"), utils.InfoColor(filePath))
 			HandleDownloadResponse(conn, userId, filePath)
 			continue
 		default:
-			fmt.Println(message)
+			if strings.Contains(message, "has joined the chat") {
+				fmt.Println(utils.WarningColor("👋 " + message))
+			} else if strings.Contains(message, "has rejoined the chat") {
+				fmt.Println(utils.WarningColor("🔄 " + message))
+			} else if strings.Contains(message, "is now offline") {
+				fmt.Println(utils.WarningColor("👋 " + message))
+			} else {
+				fmt.Println(message)
+			}
 		}
 	}
 }
@@ -172,64 +215,75 @@ func ReadLoop(conn net.Conn) {
 func WriteLoop(conn net.Conn) {
 	reader := bufio.NewReader(os.Stdin)
 	for {
+		fmt.Print(utils.CommandColor(">>> "))
 		message, _ := reader.ReadString('\n')
 		message = strings.TrimSpace(message)
 		switch {
 		case message == "exit":
-			fmt.Println("Goodbye!")
+			fmt.Println(utils.InfoColor("👋 Goodbye!"))
 			conn.Close()
 			return
+		case message == "/help":
+			utils.PrintHelp()
+			continue
 		case strings.HasPrefix(message, "/sendfile"):
 			args := strings.SplitN(message, " ", 3)
 			if len(args) != 3 {
-				fmt.Println("Invalid arguments. Use: /sendfile <userId> <filename>")
+				fmt.Println(utils.ErrorColor("❌ Invalid arguments. Use: /sendfile <userId> <filename>"))
 				continue
 			}
 			recipientId := args[1]
 			filePath := args[2]
+			fmt.Println(utils.InfoColor("📤 Sending file to"), utils.UserColor(recipientId))
 			HandleSendFile(conn, recipientId, filePath)
 			continue
 		case strings.HasPrefix(message, "/sendfolder"):
 			args := strings.SplitN(message, " ", 3)
 			if len(args) != 3 {
-				fmt.Println("Invalid arguments. Use: /sendfolder <userId> <folderPath>")
+				fmt.Println(utils.ErrorColor("❌ Invalid arguments. Use: /sendfolder <userId> <folderPath>"))
 				continue
 			}
 			recipientId := args[1]
 			folderPath := args[2]
+			fmt.Println(utils.InfoColor("📤 Sending folder to"), utils.UserColor(recipientId))
 			HandleSendFolder(conn, recipientId, folderPath)
 			continue
 		case strings.HasPrefix(message, "/lookup"):
 			args := strings.SplitN(message, " ", 2)
 			if len(args) != 2 {
-				fmt.Println("Invalid arguments. Use: /lookup <userId>")
+				fmt.Println(utils.ErrorColor("❌ Invalid arguments. Use: /lookup <userId>"))
 				continue
 			}
 			recipientId := args[1]
+			fmt.Println(utils.InfoColor("🔍 Looking up files for user"), utils.UserColor(recipientId))
 			HandleLookupRequest(conn, recipientId)
 			continue
 		case strings.HasPrefix(message, "/status"):
+			fmt.Println(utils.InfoColor("👥 Fetching online users..."))
 			_, err := conn.Write([]byte(message))
 			if err != nil {
-				fmt.Println("error in write message", err)
+				fmt.Println(utils.ErrorColor("❌ Error checking status:"), err)
 				continue
 			}
 			continue
 		case strings.HasPrefix(message, "/download"):
 			args := strings.SplitN(message, " ", 3)
 			if len(args) != 3 {
-				fmt.Println("Invalid arguments. Use: /download <userId> <filename>")
+				fmt.Println(utils.ErrorColor("❌ Invalid arguments. Use: /download <userId> <filename>"))
 				continue
 			}
 			recipientId := args[1]
 			filePath := args[2]
+			fmt.Println(utils.InfoColor("📥 Requesting download from"), utils.UserColor(recipientId))
 			HandleDownloadRequest(conn, recipientId, filePath)
 			continue
 		default:
-			_, err := conn.Write([]byte(message))
-			if err != nil {
-				fmt.Println("error in write message", err)
-				return
+			if message != "" {
+				_, err := conn.Write([]byte(message))
+				if err != nil {
+					fmt.Println(utils.ErrorColor("❌ Error sending message:"), err)
+					return
+				}
 			}
 		}
 	}

@@ -48,30 +48,30 @@ func HandleConnection(conn net.Conn, server *interfaces.Server) {
 	ipAddr := conn.RemoteAddr().String()
 	ip := strings.Split(ipAddr, ":")[0]
 	fmt.Println("New connection from", ip)
-	// if existingUser := server.IpAddresses[ip]; existingUser != nil {
-	// 	fmt.Println("Connection already exists for IP:", ip)
-	// 	// Send reconnection signal with existing user data
-	// 	reconnectMsg := fmt.Sprintf("/RECONNECT %s %s", existingUser.Username, existingUser.StoreFilePath)
-	// 	_, err := conn.Write([]byte(reconnectMsg))
-	// 	if err != nil {
-	// 		fmt.Println("Error sending reconnect signal:", err)
-	// 		return
-	// 	}
+	if existingUser := server.IpAddresses[ip]; existingUser != nil {
+		fmt.Println("Connection already exists for IP:", ip)
+		// Send reconnection signal with existing user data
+		reconnectMsg := fmt.Sprintf("/RECONNECT %s %s", existingUser.Username, existingUser.StoreFilePath)
+		_, err := conn.Write([]byte(reconnectMsg))
+		if err != nil {
+			fmt.Println("Error sending reconnect signal:", err)
+			return
+		}
 
-	// 	// Update connection and online status
-	// 	server.Mutex.Lock()
-	// 	existingUser.Conn = conn
-	// 	existingUser.IsOnline = true
-	// 	server.Mutex.Unlock()
+		// Update connection and online status
+		server.Mutex.Lock()
+		existingUser.Conn = conn
+		existingUser.IsOnline = true
+		server.Mutex.Unlock()
 
-	// 	// Encrypt and broadcast welcome back message
-	// 	welcomeMsg := fmt.Sprintf("User %s has rejoined the chat", existingUser.Username)
-	// 	BroadcastMessage(welcomeMsg, server)
+		// Encrypt and broadcast welcome back message
+		welcomeMsg := fmt.Sprintf("User %s has rejoined the chat", existingUser.Username)
+		BroadcastMessage(welcomeMsg, server, existingUser)
 
-	// 	// Start handling messages for the reconnected user
-	// 	handleUserMessages(conn, existingUser, server)
-	// 	return
-	// }
+		// Start handling messages for the reconnected user
+		handleUserMessages(conn, existingUser, server)
+		return
+	}
 
 	buffer := make([]byte, 1024)
 	n, err := conn.Read(buffer)

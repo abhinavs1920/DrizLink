@@ -2,6 +2,7 @@ package connection
 
 import (
 	"drizlink/helper"
+	"drizlink/utils"
 	"fmt"
 	"io"
 	"net"
@@ -11,93 +12,112 @@ import (
 )
 
 func HandleSendFolder(conn net.Conn, recipientId, folderPath string) {
-	//Create a temperoroy zip file
+	fmt.Println(utils.InfoColor("📦 Preparing folder for transfer..."))
+	
+	//Create a temporary zip file
 	tempZipPath := folderPath + ".zip"
 	err := helper.CreateZipFromFolder(folderPath, tempZipPath)
 	if err != nil {
-		fmt.Printf("Error creating zip file: ", err)
+		fmt.Println(utils.ErrorColor("❌ Error creating zip file:"), err)
+		return
 	}
 	defer os.Remove(tempZipPath) //clean up temporary zip file
 
 	//open zip file
 	zipFile, err := os.Open(tempZipPath)
 	if err != nil {
-		fmt.Printf("Error opening temp zip file: ", err)
+		fmt.Println(utils.ErrorColor("❌ Error opening temp zip file:"), err)
 		return
 	}
-
 	defer zipFile.Close()
 
 	//Get zip file info
 	zipInfo, err := zipFile.Stat()
 	if err != nil {
-		fmt.Printf("Error getting zip file info: ", err)
+		fmt.Println(utils.ErrorColor("❌ Error getting zip file info:"), err)
 		return
 	}
 
 	zipSize := zipInfo.Size()
 	folderName := filepath.Base(folderPath)
 
-	fmt.Printf("Sending folder '%s' to user %s...\n", folderName, recipientId)
+	fmt.Printf("%s Sending folder '%s' to user %s...\n", 
+		utils.InfoColor("📤"),
+		utils.InfoColor(folderName),
+		utils.UserColor(recipientId))
+		
 	// Send folder request with zip size
 	_, err = conn.Write([]byte(fmt.Sprintf("/FOLDER_REQUEST %s %s %d\n", recipientId, folderName, zipSize)))
 	if err != nil {
-		fmt.Printf("Error sending folder request: %v\n", err)
+		fmt.Println(utils.ErrorColor("❌ Error sending folder request:"), err)
 		return
 	}
 
-	//stream zip file data
-	n, err := io.CopyN(conn, zipFile, zipSize)
+	// Create progress bar
+	bar := utils.CreateProgressBar(zipSize, "📤 Sending folder")
+	
+	// Stream zip file data
+	reader := io.TeeReader(zipFile, bar)
+	n, err := io.CopyN(conn, reader, zipSize)
+	
 	if err != nil {
-		fmt.Printf("Error sending folder data: %v\n", err)
+		fmt.Println(utils.ErrorColor("\n❌ Error sending folder:"), err)
 		return
 	}
 	if n != zipSize {
-		fmt.Printf("Error: sent %d bytes, expected %d bytes\n", n, zipSize)
+		fmt.Println(utils.ErrorColor("\n❌ Error: sent"), utils.ErrorColor(n), utils.ErrorColor("bytes, expected"), utils.ErrorColor(zipSize), utils.ErrorColor("bytes"))
 		return
 	}
-	fmt.Printf("Folder '%s' sent successfully!\n", folderName)
+	fmt.Println(utils.SuccessColor("\n✅ Folder"), utils.SuccessColor(folderName), utils.SuccessColor("sent successfully!"))
 }
 
 func HandleFolderTransfer(conn net.Conn, recipientId, folderName string, folderSize int64, storeFilePath string) {
-	fmt.Printf("Receiving folder: %s (Size: %d bytes)\n", folderName, folderSize)
+	fmt.Printf("%s Receiving folder: %s (Size: %s)\n", 
+		utils.InfoColor("📥"),
+		utils.InfoColor(folderName),
+		utils.InfoColor(fmt.Sprintf("%d bytes", folderSize)))
 
 	// Create temporary zip file to store received data
 	tempZipPath := filepath.Join(storeFilePath, folderName+".zip")
 	zipFile, err := os.Create(tempZipPath)
 	if err != nil {
-		fmt.Printf("Error creating temporary zip file: %v\n", err)
+		fmt.Println(utils.ErrorColor("❌ Error creating temporary zip file:"), err)
 		return
 	}
-
-	// Receive the zip file data
-	n, err := io.CopyN(zipFile, conn, folderSize)
-	if err != nil {
-		zipFile.Close()
-		os.Remove(tempZipPath)
-		fmt.Printf("Error receiving folder data: %v\n", err)
-		return
-	}
+	
+	// Create progress bar
+	bar := utils.CreateProgressBar(folderSize, "📥 Receiving folder")
+	
+	// Receive the zip file data with progress
+	n, err := io.CopyN(zipFile, io.TeeReader(conn, bar), folderSize)
 	zipFile.Close()
+	
+	if err != nil {
+		os.Remove(tempZipPath)
+		fmt.Println(utils.ErrorColor("\n❌ Error receiving folder data:"), err)
+		return
+	}
 
 	if n != folderSize {
 		os.Remove(tempZipPath)
-		fmt.Printf("Error: received %d bytes, expected %d bytes\n", n, folderSize)
+		fmt.Println(utils.ErrorColor("\n❌ Error: received"), utils.ErrorColor(n), utils.ErrorColor("bytes, expected"), utils.ErrorColor(folderSize), utils.ErrorColor("bytes"))
 		return
 	}
 
+	fmt.Println(utils.InfoColor("\n📦 Extracting folder..."))
 	//Extract the zip file
 	destPath := filepath.Join(storeFilePath, folderName)
 	err = helper.ExtractZip(tempZipPath, destPath)
 	if err != nil {
 		os.Remove(tempZipPath)
-		fmt.Printf("Error extracting folder: %v\n", err)
+		fmt.Println(utils.ErrorColor("❌ Error extracting folder:"), err)
 		return
 	}
 
 	// Clean up the temporary zip file
 	os.Remove(tempZipPath)
-	fmt.Printf("Folder '%s' received and extracted successfully!\n", folderName)
+	fmt.Println(utils.SuccessColor("✅ Folder"), utils.SuccessColor(folderName), utils.SuccessColor("received and extracted successfully!"))
+	fmt.Println(utils.InfoColor("📂 Saved to:"), utils.InfoColor(storeFilePath))
 }
 
 func HandleLookupRequest(conn net.Conn, userId string) {

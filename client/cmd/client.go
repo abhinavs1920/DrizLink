@@ -2,27 +2,34 @@ package main
 
 import (
 	connection "drizlink/client/internal"
+	"drizlink/utils"
 	"fmt"
 )
 
 func main() {
-	conn, err := connection.Connect("192.168.65.7:8080")
+	utils.PrintBanner()
+	fmt.Println(utils.InfoColor("Connecting to server..."))
+	
+	conn, err := connection.Connect(":8080")
 	if err != nil {
 		if err.Error() == "reconnect" {
 			goto startChat
 		} else {
-			panic(err)
+			fmt.Println(utils.ErrorColor("❌ Error connecting to server:"), err)
+			return
 		}
 	}
 
 	defer connection.Close(conn)
 
+	fmt.Println(utils.InfoColor("Please login to continue:"))
 	err = connection.UserInput("Username", conn)
 	if err != nil {
 		if err.Error() == "reconnect" {
 			goto startChat
 		} else {
-			panic(err)
+			fmt.Println(utils.ErrorColor("❌ Error during login:"), err)
+			return
 		}
 	}
 
@@ -32,16 +39,17 @@ func main() {
 		if err.Error() == "reconnect" {
 			goto startChat
 		} else {
-			panic(err)
+			fmt.Println(utils.ErrorColor("❌ Error setting file path:"), err)
+			return
 		}
 	}
 
 startChat:
-	fmt.Println("\nWelcome to the P2P File Sharing App!")
-	fmt.Println("-----------------------------------")
-	fmt.Println("Type '/status' to see online users.")
-	fmt.Println("Use '/sendfile <userId> <filename>' to send a file.")
-	fmt.Println("Type 'exit' to quit.")
+	fmt.Println(utils.HeaderColor("\n✨ Welcome to DrizLink - P2P File Sharing! ✨"))
+	fmt.Println(utils.InfoColor("------------------------------------------------"))
+	fmt.Println(utils.SuccessColor("✅ Successfully connected to server!"))
+	fmt.Println(utils.InfoColor("Type /help to see available commands"))
+	fmt.Println(utils.InfoColor("------------------------------------------------"))
 
 	go connection.ReadLoop(conn)
 	connection.WriteLoop(conn)
