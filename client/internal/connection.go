@@ -49,6 +49,32 @@ func UserInput(attribute string, conn net.Conn) error {
 	input, _ := reader.ReadString('\n')
 	input = strings.TrimSpace(input)
 
+	// If it's a store file path, validate it
+	if attribute == "Store File Path" {
+		for {
+			// Check if path exists
+			if _, err := os.Stat(input); os.IsNotExist(err) {
+				fmt.Println(utils.ErrorColor("❌ Error: Directory does not exist"))
+				fmt.Println("Enter a valid " + attribute + ": ")
+				input, _ = reader.ReadString('\n')
+				input = strings.TrimSpace(input)
+				continue
+			}
+			
+			// Check if it's a directory
+			fileInfo, err := os.Stat(input)
+			if err != nil || !fileInfo.IsDir() {
+				fmt.Println(utils.ErrorColor("❌ Error: Path is not a directory"))
+				fmt.Println("Enter a valid " + attribute + ": ")
+				input, _ = reader.ReadString('\n')
+				input = strings.TrimSpace(input)
+				continue
+			}
+			
+			break
+		}
+	}
+
 	_, err = conn.Write([]byte(input))
 	if err != nil {
 		fmt.Println("error in write " + attribute)

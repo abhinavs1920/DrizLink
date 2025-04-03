@@ -22,26 +22,45 @@ A peer-to-peer file sharing application with integrated chat functionality, allo
 ### Steps
 1. Clone the repository ⬇️
 ```bash
-git clone https://github.com/yourusername/drizlink.git
-cd drizlink
+git clone https://github.com/Harsh2563/DrizLink_Cli.git
+cd DrizLink_Cli
 ```
 
 2. Build the application 🛠️
 ```bash
-go build -o drizlink
+go build -o DrizLink_Cli
 ```
 
 ## 🎮 Usage
 
 ### Starting the Server 🖥️
 ```bash
-./drizlink server --port 8080
+# Start server on default port 8080
+./DrizLink_Cli server --port 8080
+
+# Start server on custom port
+./DrizLink_Cli server --port 9000
+
+# On Windows, you might use:
+DrizLink_Cli.exe server --port 8080
 ```
 
 ### Connecting as a Client 📱
 ```bash
-./drizlink client --server 127.0.0.1:8080 --username YourName --path /path/to/shared/folder
+# Connect to local server with default port
+./DrizLink_Cli client --server localhost:8080
+
+# Connect to remote server
+./DrizLink_Cli client --server 192.168.1.5:8080
+
+# On Windows, you might use:
+DrizLink_Cli.exe client --server localhost:8080
 ```
+
+The application will validate:
+- Server availability before client connection attempts
+- Port availability before starting a server
+- Existence of shared folder paths
 
 ## 🏗️ Architecture
 
@@ -94,5 +113,9 @@ The application follows a hybrid P2P architecture:
 ## 🔒 Security
 
 The application implements basic reconnection security by tracking IP addresses and user sessions.
+
+- **📁 Folder Path Validation**: The application verifies that shared folder paths exist before establishing a connection. If an invalid path is provided, the user will be prompted to enter a valid folder path.
+- **🔌 Server Availability Check**: Client automatically verifies server availability before attempting connection, preventing connection errors.
+- **🚫 Port Conflict Prevention**: Server detects if a port is already in use and alerts the user to choose another port.
 
 Made with ❤️ by the DrizLink Team
