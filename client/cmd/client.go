@@ -3,23 +3,13 @@ package main
 import (
 	"bufio"
 	connection "drizlink/client/internal"
+	"drizlink/helper"
 	"drizlink/utils"
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"strings"
-	"time"
 )
-
-func checkServerAvailability(address string) bool {
-	conn, err := net.DialTimeout("tcp", address, 3*time.Second)
-	if err != nil {
-		return false
-	}
-	conn.Close()
-	return true
-}
 
 func promptForServerAddress() string {
 	reader := bufio.NewReader(os.Stdin)
@@ -36,8 +26,9 @@ func promptForServerAddress() string {
 		}
 		
 		// Check if server is available at this address
-		if !checkServerAvailability(address) {
-			fmt.Println(utils.ErrorColor("❌ No server available at " + address))
+		available, errMsg := helper.CheckServerAvailability(address)
+		if !available {
+			fmt.Println(utils.ErrorColor("❌ No server available at " + address + ": " + errMsg))
 			fmt.Println(utils.InfoColor("Would you like to try another address? (y/n)"))
 			fmt.Print(utils.CommandColor(">>> "))
 			
@@ -68,8 +59,10 @@ func main() {
 		fmt.Println(utils.InfoColor("Connecting to server at " + address + "..."))
 		
 		// Check if server is available
-		if !checkServerAvailability(address) {
+		available, errMsg := helper.CheckServerAvailability(address)
+		if !available {
 			fmt.Println(utils.ErrorColor("❌ Error: No server running at " + address))
+			fmt.Println(utils.ErrorColor("  Details: " + errMsg))
 			fmt.Println(utils.InfoColor("Please check the address or start a server first."))
 			return
 		}

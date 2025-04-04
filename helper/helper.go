@@ -5,13 +5,49 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"time"
 )
 
 func GenerateUserId() string {
 	return strconv.Itoa(rand.Intn(10000000))
+}
+
+// CheckServerAvailability checks if a server is running at the given address
+// Returns a boolean and an error message if the server is not available
+func CheckServerAvailability(address string) (bool, string) {
+	conn, err := net.DialTimeout("tcp", address, 3*time.Second)
+	if err != nil {
+		// Provide more specific error information
+		if strings.Contains(err.Error(), "connection refused") {
+			return false, "Connection refused - no server running at this address"
+		} else if strings.Contains(err.Error(), "no such host") {
+			return false, "Host not found - check if the hostname is correct"
+		} else if strings.Contains(err.Error(), "i/o timeout") {
+			return false, "Connection timed out - server might be behind a firewall"
+		}
+		return false, err.Error()
+	}
+	conn.Close()
+	return true, ""
+}
+
+// IsPortInUse checks if a port is already in use
+// Returns true if the port is in use, false otherwise
+func IsPortInUse(port string) bool {
+	// Make sure we have just the port number
+	portNum := strings.TrimPrefix(port, ":")
+	
+	conn, err := net.DialTimeout("tcp", "localhost:"+portNum, time.Second)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
 }
 
 // CreateZipFromFolder creates a zip archive from a folder

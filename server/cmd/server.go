@@ -1,25 +1,15 @@
 package main
 
 import (
+	helper "drizlink/helper"
 	"drizlink/server/interfaces"
 	connection "drizlink/server/internal"
 	"drizlink/utils"
 	"flag"
 	"fmt"
-	"net"
 	"strings"
 	"time"
 )
-
-// Check if port is already in use
-func isPortInUse(port string) bool {
-	conn, err := net.DialTimeout("tcp", "localhost:"+port, time.Second)
-	if err != nil {
-		return false
-	}
-	conn.Close()
-	return true
-}
 
 func main() {
 	port := flag.String("port", "8080", "Port to run the server on")
@@ -32,7 +22,7 @@ func main() {
 	}
 	
 	// Check if port is already in use
-	if isPortInUse(*port) {
+	if helper.IsPortInUse(*port) {
 		fmt.Println(utils.ErrorColor("❌ Error: Port " + *port + " is already in use"))
 		fmt.Println(utils.InfoColor("Please choose a different port or stop the other server."))
 		return

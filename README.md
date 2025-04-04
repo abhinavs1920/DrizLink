@@ -36,25 +36,21 @@ go build -o DrizLink_Cli
 ### Starting the Server 🖥️
 ```bash
 # Start server on default port 8080
-./DrizLink_Cli server --port 8080
+go run ./server/cmd --port 8080
 
 # Start server on custom port
-./DrizLink_Cli server --port 9000
+go run ./server/cmd --port 3000
 
-# On Windows, you might use:
-DrizLink_Cli.exe server --port 8080
 ```
 
 ### Connecting as a Client 📱
 ```bash
 # Connect to local server with default port
-./DrizLink_Cli client --server localhost:8080
+go run ./client/cmd --server localhost:8080
 
 # Connect to remote server
-./DrizLink_Cli client --server 192.168.1.5:8080
+go run ./client/cmd --server 192.168.0.203:4000
 
-# On Windows, you might use:
-DrizLink_Cli.exe client --server localhost:8080
 ```
 
 The application will validate:
