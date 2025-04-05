@@ -138,17 +138,24 @@ func handleUserMessages(conn net.Conn, user *interfaces.User, server *interfaces
 			BroadcastMessage(offlineMsg, server, user)
 			return
 		case strings.HasPrefix(messageContent, "/FILE_REQUEST"):
-			args := strings.SplitN(messageContent, " ", 4)
-			if len(args) != 4 {
-				fmt.Println("Invalid arguments. Use: /FILE_REQUEST <userId> <filename> <fileSize>")
+			args := strings.SplitN(messageContent, " ", 5) // Updated to include checksum
+			if len(args) < 4 {
+				fmt.Println("Invalid arguments. Use: /FILE_REQUEST <userId> <filename> <fileSize> [checksum]")
 				continue
 			}
 			recipientId := args[1]
 			fileName := args[2]
 			fileSizeStr := strings.TrimSpace(args[3])
 			fileSize, err := strconv.ParseInt(fileSizeStr, 10, 64)
+			
+			// Include checksum in filename if provided
+			if len(args) == 5 {
+				checksum := strings.TrimSpace(args[4])
+				fileName = fileName + "|" + checksum
+			}
+			
 			if err != nil {
-				fmt.Println("Invalid fileSize. Use: /FILE_REQUEST <userId> <filename> <fileSize>")
+				fmt.Println("Invalid fileSize. Use: /FILE_REQUEST <userId> <filename> <fileSize> [checksum]")
 				continue
 			}
 
