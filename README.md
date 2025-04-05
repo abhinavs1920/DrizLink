@@ -13,6 +13,7 @@ A peer-to-peer file sharing application with integrated chat functionality, allo
 - **👥 Status Tracking**: Monitor which users are currently online
 - **🎨 Colorful UI**: Enhanced CLI interface with colors and emojis
 - **📊 Progress Bars**: Visual feedback for file and folder transfers
+- **🔒 Data Integrity**: MD5 checksum verification for files and folders
 
 ## 🚀 Installation
 
@@ -113,5 +114,13 @@ The application implements basic reconnection security by tracking IP addresses 
 - **📁 Folder Path Validation**: The application verifies that shared folder paths exist before establishing a connection. If an invalid path is provided, the user will be prompted to enter a valid folder path.
 - **🔌 Server Availability Check**: Client automatically verifies server availability before attempting connection, preventing connection errors.
 - **🚫 Port Conflict Prevention**: Server detects if a port is already in use and alerts the user to choose another port.
+- **🔐 Checksum Verification**: All file and folder transfers include MD5 checksum calculation to verify data integrity:
+  - When sending, a unique MD5 hash is calculated for the file/folder contents
+  - During transfer, the hash is securely transmitted alongside the data
+  - Upon receiving, a new hash is calculated from the received data
+  - The application compares both hashes to confirm the transfer was successful and uncorrupted
+  - Users receive visual confirmation of integrity checks with clear success/failure messages
+
+This checksum process ensures that files and folders arrive exactly as they were sent, protecting against data corruption during transfer.
 
 Made with ❤️ by the DrizLink Team

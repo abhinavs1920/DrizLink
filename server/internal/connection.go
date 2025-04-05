@@ -48,30 +48,30 @@ func HandleConnection(conn net.Conn, server *interfaces.Server) {
 	ipAddr := conn.RemoteAddr().String()
 	ip := strings.Split(ipAddr, ":")[0]
 	fmt.Println("New connection from", ip)
-	if existingUser := server.IpAddresses[ip]; existingUser != nil {
-		fmt.Println("Connection already exists for IP:", ip)
-		// Send reconnection signal with existing user data
-		reconnectMsg := fmt.Sprintf("/RECONNECT %s %s", existingUser.Username, existingUser.StoreFilePath)
-		_, err := conn.Write([]byte(reconnectMsg))
-		if err != nil {
-			fmt.Println("Error sending reconnect signal:", err)
-			return
-		}
+	// if existingUser := server.IpAddresses[ip]; existingUser != nil {
+	// 	fmt.Println("Connection already exists for IP:", ip)
+	// 	// Send reconnection signal with existing user data
+	// 	reconnectMsg := fmt.Sprintf("/RECONNECT %s %s", existingUser.Username, existingUser.StoreFilePath)
+	// 	_, err := conn.Write([]byte(reconnectMsg))
+	// 	if err != nil {
+	// 		fmt.Println("Error sending reconnect signal:", err)
+	// 		return
+	// 	}
 
-		// Update connection and online status
-		server.Mutex.Lock()
-		existingUser.Conn = conn
-		existingUser.IsOnline = true
-		server.Mutex.Unlock()
+	// 	// Update connection and online status
+	// 	server.Mutex.Lock()
+	// 	existingUser.Conn = conn
+	// 	existingUser.IsOnline = true
+	// 	server.Mutex.Unlock()
 
-		// Encrypt and broadcast welcome back message
-		welcomeMsg := fmt.Sprintf("User %s has rejoined the chat", existingUser.Username)
-		BroadcastMessage(welcomeMsg, server, existingUser)
+	// 	// Encrypt and broadcast welcome back message
+	// 	welcomeMsg := fmt.Sprintf("User %s has rejoined the chat", existingUser.Username)
+	// 	BroadcastMessage(welcomeMsg, server, existingUser)
 
-		// Start handling messages for the reconnected user
-		handleUserMessages(conn, existingUser, server)
-		return
-	}
+	// 	// Start handling messages for the reconnected user
+	// 	handleUserMessages(conn, existingUser, server)
+	// 	return
+	// }
 
 	buffer := make([]byte, 1024)
 	n, err := conn.Read(buffer)
@@ -162,17 +162,24 @@ func handleUserMessages(conn net.Conn, user *interfaces.User, server *interfaces
 			HandleFileTransfer(server, conn, recipientId, fileName, fileSize)
 			continue
 		case strings.HasPrefix(messageContent, "/FOLDER_REQUEST"):
-			args := strings.SplitN(messageContent, " ", 4)
-			if len(args) != 4 {
-				fmt.Println("Invalid arguments. Use: /FOLDER_REQUEST <userId> <folderName> <folderSize>")
+			args := strings.SplitN(messageContent, " ", 5) // Updated to include checksum
+			if len(args) < 4 {
+				fmt.Println("Invalid arguments. Use: /FOLDER_REQUEST <userId> <folderName> <folderSize> [checksum]")
 				continue
 			}
 			recipientId := args[1]
 			folderName := args[2]
 			folderSizeStr := strings.TrimSpace(args[3])
 			folderSize, err := strconv.ParseInt(folderSizeStr, 10, 64)
+			
+			// Include checksum in foldername if provided
+			if len(args) == 5 {
+				checksum := strings.TrimSpace(args[4])
+				folderName = folderName + "|" + checksum
+			}
+			
 			if err != nil {
-				fmt.Println("Invalid folderSize. Use: /FOLDER_REQUEST <userId> <folderName> <folderSize>")
+				fmt.Println("Invalid folderSize. Use: /FOLDER_REQUEST <userId> <folderName> <folderSize> [checksum]")
 				continue
 			}
 

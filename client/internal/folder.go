@@ -40,14 +40,22 @@ func HandleSendFolder(conn net.Conn, recipientId, folderPath string) {
 
 	zipSize := zipInfo.Size()
 	folderName := filepath.Base(folderPath)
+	
+	// Calculate checksum of the zip file
+	checksum, err := helper.CalculateFileChecksum(tempZipPath)
+	if err != nil {
+		fmt.Println(utils.ErrorColor("❌ Error calculating checksum:"), err)
+		return
+	}
 
 	fmt.Printf("%s Sending folder '%s' to user %s...\n", 
 		utils.InfoColor("📤"),
 		utils.InfoColor(folderName),
 		utils.UserColor(recipientId))
 		
-	// Send folder request with zip size
-	_, err = conn.Write([]byte(fmt.Sprintf("/FOLDER_REQUEST %s %s %d\n", recipientId, folderName, zipSize)))
+	// Send folder request with zip size and checksum
+	_, err = conn.Write([]byte(fmt.Sprintf("/FOLDER_REQUEST %s %s %d %s\n", 
+		recipientId, folderName, zipSize, checksum)))
 	if err != nil {
 		fmt.Println(utils.ErrorColor("❌ Error sending folder request:"), err)
 		return
@@ -69,9 +77,20 @@ func HandleSendFolder(conn net.Conn, recipientId, folderPath string) {
 		return
 	}
 	fmt.Println(utils.SuccessColor("\n✅ Folder"), utils.SuccessColor(folderName), utils.SuccessColor("sent successfully!"))
+	fmt.Println(utils.InfoColor("  MD5 Checksum:"), utils.InfoColor(checksum))
 }
 
 func HandleFolderTransfer(conn net.Conn, recipientId, folderName string, folderSize int64, storeFilePath string) {
+	// Extract checksum if present
+	checksum := ""
+	
+	parts := strings.SplitN(folderName, "|", 2)
+	if len(parts) == 2 {
+		folderName = parts[0]
+		checksum = parts[1]
+		fmt.Println(utils.InfoColor("📋 Original checksum:"), utils.InfoColor(checksum))
+	}
+	
 	fmt.Printf("%s Receiving folder: %s (Size: %s)\n", 
 		utils.InfoColor("📥"),
 		utils.InfoColor(folderName),
@@ -103,6 +122,22 @@ func HandleFolderTransfer(conn net.Conn, recipientId, folderName string, folderS
 		fmt.Println(utils.ErrorColor("\n❌ Error: received"), utils.ErrorColor(n), utils.ErrorColor("bytes, expected"), utils.ErrorColor(folderSize), utils.ErrorColor("bytes"))
 		return
 	}
+	
+	// Verify checksum if provided
+	if checksum != "" {
+		receivedChecksum, err := helper.CalculateFileChecksum(tempZipPath)
+		if err != nil {
+			fmt.Println(utils.ErrorColor("\n❌ Error calculating checksum:"), err)
+		} else {
+			fmt.Println(utils.InfoColor("\n📋 Calculated checksum:"), utils.InfoColor(receivedChecksum))
+			
+			if helper.VerifyChecksum(checksum, receivedChecksum) {
+				fmt.Println(utils.SuccessColor("✅ Checksum verification successful! Folder integrity confirmed."))
+			} else {
+				fmt.Println(utils.ErrorColor("❌ Checksum verification failed! Folder may be corrupted."))
+			}
+		}
+	}
 
 	fmt.Println(utils.InfoColor("\n📦 Extracting folder..."))
 	//Extract the zip file
@@ -117,7 +152,7 @@ func HandleFolderTransfer(conn net.Conn, recipientId, folderName string, folderS
 	// Clean up the temporary zip file
 	os.Remove(tempZipPath)
 	fmt.Println(utils.SuccessColor("✅ Folder"), utils.SuccessColor(folderName), utils.SuccessColor("received and extracted successfully!"))
-	fmt.Println(utils.InfoColor("📂 Saved to:"), utils.InfoColor(storeFilePath))
+	fmt.Println(utils.InfoColor("📂 Saved to:"), utils.InfoColor(destPath))
 }
 
 func HandleLookupRequest(conn net.Conn, userId string) {
