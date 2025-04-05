@@ -166,6 +166,26 @@ func ReadLoop(conn net.Conn) {
 			for _, line := range strings.Split(userList, "\n") {
 				if strings.TrimSpace(line) != "" {
 					userCount++
+					// Enhanced formatting for username and ID
+					if strings.Contains(line, "[ID:") {
+						parts := strings.SplitN(line, "[ID:", 2)
+						if len(parts) == 2 {
+							username := strings.TrimSpace(parts[0])
+							idPart := strings.SplitN(parts[1], "]", 2)
+							if len(idPart) == 2 {
+								userId := strings.TrimSpace(idPart[0])
+								status := strings.TrimSpace(idPart[1])
+								fmt.Printf("%s %s %s %s %s\n",
+									utils.SuccessColor(" •"),
+									utils.UserColor(username),
+									utils.InfoColor("(ID:"),
+									utils.CommandColor(userId),
+									utils.InfoColor(")"+status))
+								continue
+							}
+						}
+					}
+					// Fallback to original formatting if parsing fails
 					fmt.Println(utils.SuccessColor(" • "), utils.UserColor(line))
 				}
 			}
