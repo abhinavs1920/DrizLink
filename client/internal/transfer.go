@@ -11,6 +11,7 @@ import (
 	"time"
 )
 
+// TransferType represents the type of transfer
 type TransferType int
 
 const (
@@ -18,17 +19,7 @@ const (
 	FolderTransfer
 )
 
-func (t TransferType) String() string {
-	switch t {
-	case FileTransfer:
-		return "File"
-	case FolderTransfer:
-		return "Folder"
-	default:
-		return "Unknown"
-	}
-}
-
+// TransferStatus represents the status of a transfer
 type TransferStatus int
 
 const (
@@ -38,6 +29,7 @@ const (
 	Failed
 )
 
+// String representation of TransferStatus
 func (s TransferStatus) String() string {
 	switch s {
 	case Active:
@@ -53,16 +45,7 @@ func (s TransferStatus) String() string {
 	}
 }
 
-type TransferReader interface {
-	Read(p []byte) (n int, err error)
-	GetBytesProcessed() int64
-}
-
-type TransferWriter interface {
-	Write(p []byte) (n int, err error)
-	GetBytesProcessed() int64
-}
-
+// Transfer represents an active file or folder transfer
 type Transfer struct {
 	ID            string
 	Type          TransferType
@@ -70,7 +53,7 @@ type Transfer struct {
 	Size          int64
 	BytesComplete int64
 	Status        TransferStatus
-	Direction     string 
+	Direction     string // "send" or "receive"
 	Recipient     string
 	Path          string
 	Checksum      string
@@ -78,272 +61,417 @@ type Transfer struct {
 	File          *os.File
 	Connection    net.Conn
 	ProgressBar   *utils.ProgressBar
-	pauseMutex    sync.Mutex
-	isPaused      bool
+	PauseLock     sync.Mutex
+	IsPaused      bool
 }
 
+// ActiveTransfers tracks all ongoing transfers
 var (
 	ActiveTransfers   = make(map[string]*Transfer)
 	TransfersMutex    sync.RWMutex
 	transferIDCounter = 1
-	DefaultManager    *TransferManager
 )
 
-func init() {
-	DefaultManager = NewTransferManager()
-}
-
-type TransferManager struct {
-	transfers      map[string]*Transfer
-	mutex          sync.RWMutex
-	nextID         int
-}
-
-func NewTransferManager() *TransferManager {
-	return &TransferManager{
-		transfers: make(map[string]*Transfer),
-		nextID:    1,
-	}
-}
-
-func (tm *TransferManager) GenerateID() string {
-	tm.mutex.Lock()
-	defer tm.mutex.Unlock()
-	id := strconv.Itoa(tm.nextID)
-	tm.nextID++
+// GenerateTransferID creates a unique ID for a transfer
+func GenerateTransferID() string {
+	TransfersMutex.Lock()
+	defer TransfersMutex.Unlock()
+	id := strconv.Itoa(transferIDCounter)
+	transferIDCounter++
 	return id
 }
 
-// GenerateTransferID creates a unique ID for a transfer (legacy function for compatibility)
-func GenerateTransferID() string {
-	return DefaultManager.GenerateID()
-}
-
-func (tm *TransferManager) Register(transfer *Transfer) {
-	tm.mutex.Lock()
-	defer tm.mutex.Unlock()
-	tm.transfers[transfer.ID] = transfer
-}
-
-// RegisterTransfer adds a new transfer to the tracking system (legacy function for compatibility)
+// RegisterTransfer adds a new transfer to the tracking system
 func RegisterTransfer(transfer *Transfer) {
-	DefaultManager.Register(transfer)
-	// Also maintain old behavior for backward compatibility
 	TransfersMutex.Lock()
 	defer TransfersMutex.Unlock()
 	ActiveTransfers[transfer.ID] = transfer
 }
 
-func (tm *TransferManager) Get(id string) (*Transfer, bool) {
-	tm.mutex.RLock()
-	defer tm.mutex.RUnlock()
-	transfer, exists := tm.transfers[id]
-	return transfer, exists
-}
-
-// GetTransfer retrieves a transfer by ID (legacy function for compatibility)
+// GetTransfer retrieves a transfer by ID
 func GetTransfer(id string) (*Transfer, bool) {
-	// Use old map for backward compatibility
 	TransfersMutex.RLock()
 	defer TransfersMutex.RUnlock()
 	transfer, exists := ActiveTransfers[id]
 	return transfer, exists
 }
 
-func (tm *TransferManager) Remove(id string) {
-	tm.mutex.Lock()
-	defer tm.mutex.Unlock()
-	delete(tm.transfers, id)
-}
-
-// RemoveTransfer removes a completed or failed transfer (legacy function for compatibility)
+// RemoveTransfer removes a completed or failed transfer
 func RemoveTransfer(id string) {
-	DefaultManager.Remove(id)
-	// Also maintain old behavior for backward compatibility
 	TransfersMutex.Lock()
 	defer TransfersMutex.Unlock()
 	delete(ActiveTransfers, id)
 }
 
-func (tm *TransferManager) List() []*Transfer {
-	tm.mutex.RLock()
-	defer tm.mutex.RUnlock()
+// ListTransfers returns all active transfers
+func ListTransfers() []*Transfer {
+	TransfersMutex.RLock()
+	defer TransfersMutex.RUnlock()
 	
-	transfers := make([]*Transfer, 0, len(tm.transfers))
-	for _, transfer := range tm.transfers {
+	transfers := make([]*Transfer, 0, len(ActiveTransfers))
+	for _, transfer := range ActiveTransfers {
 		transfers = append(transfers, transfer)
 	}
 	return transfers
 }
 
-// ListTransfers returns all active transfers (legacy function for compatibility)
-func ListTransfers() []*Transfer {
-	return DefaultManager.List()
-}
-
-func (t *Transfer) Pause() error {
-	t.pauseMutex.Lock()
-	defer t.pauseMutex.Unlock()
-	
-	if t.Status != Active {
-		return fmt.Errorf("cannot pause transfer with status: %s", t.Status)
+// PauseTransfer pauses an active transfer
+func PauseTransfer(id string) error {
+	transfer, exists := GetTransfer(id)
+	if !exists {
+		return fmt.Errorf("transfer with ID %s not found", id)
 	}
 	
-	t.Status = Paused
-	t.isPaused = true
+	transfer.PauseLock.Lock()
+	defer transfer.PauseLock.Unlock()
 	
-	if t.ProgressBar != nil {
-		t.ProgressBar.SetPaused(true)
+	if transfer.Status != Active {
+		return fmt.Errorf("cannot pause transfer with status: %s", transfer.Status)
 	}
 	
-	return nil
-}
-
-func (t *Transfer) Resume() error {
-	t.pauseMutex.Lock()
-	defer t.pauseMutex.Unlock()
+	transfer.Status = Paused
+	transfer.IsPaused = true
 	
-	if t.Status != Paused {
-		return fmt.Errorf("cannot resume transfer with status: %s", t.Status)
-	}
-	
-	t.Status = Active
-	t.isPaused = false
-	
-	if t.ProgressBar != nil {
-		t.ProgressBar.SetPaused(false)
+	// Update progress bar to show paused status
+	if transfer.ProgressBar != nil {
+		transfer.ProgressBar.SetPaused(true)
 	}
 	
 	return nil
 }
 
-func (t *Transfer) UpdateStatus(status TransferStatus) {
-	t.pauseMutex.Lock()
-	defer t.pauseMutex.Unlock()
+// ResumeTransfer resumes a paused transfer
+func ResumeTransfer(id string) error {
+	transfer, exists := GetTransfer(id)
+	if !exists {
+		return fmt.Errorf("transfer with ID %s not found", id)
+	}
 	
-	t.Status = status
+	transfer.PauseLock.Lock()
+	defer transfer.PauseLock.Unlock()
+	
+	if transfer.Status != Paused {
+		return fmt.Errorf("cannot resume transfer with status: %s", transfer.Status)
+	}
+	
+	transfer.Status = Active
+	transfer.IsPaused = false
+	
+	// Update progress bar to show active status
+	if transfer.ProgressBar != nil {
+		transfer.ProgressBar.SetPaused(false)
+	}
+	
+	return nil
 }
 
-// UpdateTransferStatus updates the status of a transfer (legacy function for compatibility)
+// UpdateTransferStatus updates the status of a transfer
 func UpdateTransferStatus(id string, status TransferStatus) {
 	transfer, exists := GetTransfer(id)
 	if !exists {
 		return
 	}
-	transfer.UpdateStatus(status)
+	
+	transfer.PauseLock.Lock()
+	defer transfer.PauseLock.Unlock()
+	
+	transfer.Status = status
 }
 
-func (t *Transfer) IsPaused() bool {
-	t.pauseMutex.Lock()
-	defer t.pauseMutex.Unlock()
-	return t.isPaused
-}
-
-func (tm *TransferManager) PauseTransfer(id string) error {
-	transfer, exists := tm.Get(id)
-	if !exists {
-		return fmt.Errorf("transfer with ID %s not found", id)
-	}
-	return transfer.Pause()
-}
-
-func (tm *TransferManager) ResumeTransfer(id string) error {
-	transfer, exists := tm.Get(id)
-	if !exists {
-		return fmt.Errorf("transfer with ID %s not found", id)
-	}
-	return transfer.Resume()
-}
-
-
-// PauseTransfer pauses an active transfer (legacy function for compatibility)
-func PauseTransfer(id string) error {
-	return DefaultManager.PauseTransfer(id)
-}
-
-// ResumeTransfer resumes a paused transfer (legacy function for compatibility)
-func ResumeTransfer(id string) error {
-	return DefaultManager.ResumeTransfer(id)
-}
-
+// CheckpointedReader is an io.Reader that supports pausing/resuming
 type CheckpointedReader struct {
-	reader     io.Reader
-	bytesRead  int64
-	transfer   *Transfer
-	chunkSize  int
-	buffer     []byte
+	Reader     io.Reader
+	BytesRead  int64
+	Transfer   *Transfer
+	ChunkSize  int
+	Buffer     []byte
+	PauseCheck func() bool
 }
 
-func NewCheckpointedReader(reader io.Reader, transfer *Transfer, chunkSize int) TransferReader {
+// NewCheckpointedReader creates a new CheckpointedReader
+func NewCheckpointedReader(reader io.Reader, transfer *Transfer, chunkSize int) *CheckpointedReader {
 	return &CheckpointedReader{
-		reader:    reader,
-		transfer:  transfer,
-		chunkSize: chunkSize,
-		buffer:    make([]byte, chunkSize),
+		Reader:    reader,
+		Transfer:  transfer,
+		ChunkSize: chunkSize,
+		Buffer:    make([]byte, chunkSize),
+		PauseCheck: func() bool {
+			transfer.PauseLock.Lock()
+			defer transfer.PauseLock.Unlock()
+			return transfer.IsPaused
+		},
 	}
 }
 
-func (r *CheckpointedReader) Read(p []byte) (n int, err error) {
-	if r.transfer.IsPaused() {
-		time.Sleep(100 * time.Millisecond)
+// Read implements io.Reader and supports pausing
+func (cr *CheckpointedReader) Read(p []byte) (n int, err error) {
+	// Check if transfer is paused
+	if cr.PauseCheck() {
+		// Sleep a bit and check again to avoid CPU spinning
+		time.Sleep(500 * time.Millisecond)
 		return 0, nil
 	}
 	
-	n, err = r.reader.Read(p)
+	// Perform actual read
+	n, err = cr.Reader.Read(p)
+	
 	if n > 0 {
-		r.bytesRead += int64(n)
-		r.transfer.BytesComplete = r.bytesRead
-		
-		// Update progress bar if available
-		if r.transfer.ProgressBar != nil {
-			r.transfer.ProgressBar.SetPaused(false) // Ensure not paused
-		}
+		cr.BytesRead += int64(n)
+		cr.Transfer.BytesComplete = cr.BytesRead
 	}
 	
 	return n, err
 }
 
-func (r *CheckpointedReader) GetBytesProcessed() int64 {
-	return r.bytesRead
-}
-
+// CheckpointedWriter is an io.Writer that supports pausing/resuming
 type CheckpointedWriter struct {
-	writer      io.Writer
-	bytesWritten int64
-	transfer    *Transfer
-	chunkSize   int
-	buffer      []byte
+	Writer      io.Writer
+	BytesWritten int64
+	Transfer    *Transfer
+	ChunkSize   int
+	Buffer      []byte
+	PauseCheck  func() bool
 }
 
-func NewCheckpointedWriter(writer io.Writer, transfer *Transfer, chunkSize int) TransferWriter {
+// NewCheckpointedWriter creates a new CheckpointedWriter
+func NewCheckpointedWriter(writer io.Writer, transfer *Transfer, chunkSize int) *CheckpointedWriter {
 	return &CheckpointedWriter{
-		writer:     writer,
-		transfer:   transfer,
-		chunkSize:  chunkSize,
-		buffer:     make([]byte, chunkSize),
+		Writer:     writer,
+		Transfer:   transfer,
+		ChunkSize:  chunkSize,
+		Buffer:     make([]byte, chunkSize),
+		PauseCheck: func() bool {
+			transfer.PauseLock.Lock()
+			defer transfer.PauseLock.Unlock()
+			return transfer.IsPaused
+		},
 	}
 }
 
-func (w *CheckpointedWriter) Write(p []byte) (n int, err error) {
-	if w.transfer.IsPaused() {
-		time.Sleep(100 * time.Millisecond)
+// Write implements io.Writer and supports pausing
+func (cw *CheckpointedWriter) Write(p []byte) (n int, err error) {
+	if cw.PauseCheck() {
+		time.Sleep(500 * time.Millisecond)
 		return 0, nil
 	}
-
-	n, err = w.writer.Write(p)
+	
+	n, err = cw.Writer.Write(p)
+	
 	if n > 0 {
-		w.bytesWritten += int64(n)
-		w.transfer.BytesComplete = w.bytesWritten
-		
-		// Update progress bar if available
-		if w.transfer.ProgressBar != nil {
-			w.transfer.ProgressBar.SetPaused(false) // Ensure not paused
-		}
+		cw.BytesWritten += int64(n)
+		cw.Transfer.BytesComplete = cw.BytesWritten
 	}
-
+	
 	return n, err
 }
 
-func (w *CheckpointedWriter) GetBytesProcessed() int64 {
-	return w.bytesWritten
+// HandlePauseTransfer handles the /pause command
+func HandlePauseTransfer(transferID string) {
+	transfer, exists := GetTransfer(transferID)
+	if !exists {
+		fmt.Println(utils.ErrorColor("❌ Transfer not found:"), utils.CommandColor(transferID))
+		return
+	}
+	
+	if transfer.Status != Active {
+		fmt.Printf("%s Transfer %s is already %s\n", 
+			utils.WarningColor("⚠"),
+			utils.CommandColor(transferID),
+			utils.WarningColor(transfer.Status.String()))
+		return
+	}
+	
+	err := PauseTransfer(transferID)
+	if err != nil {
+		fmt.Println(utils.ErrorColor("❌ Failed to pause transfer:"), err)
+		return
+	}
+	
+	fmt.Printf("%s Transfer %s paused\n", 
+		utils.WarningColor("⏸"),
+		utils.CommandColor(transferID))
+	
+	fmt.Printf("  %s: %s (%s)\n", 
+		utils.InfoColor("Name"),
+		utils.InfoColor(transfer.Name),
+		utils.InfoColor(formatTransferType(transfer.Type)))
+		
+	fmt.Printf("  %s: %s / %s (%.1f%%)\n", 
+		utils.InfoColor("Progress"),
+		utils.InfoColor(formatSize(transfer.BytesComplete)),
+		utils.InfoColor(formatSize(transfer.Size)),
+		float64(transfer.BytesComplete) / float64(transfer.Size) * 100)
+}
+
+// HandleResumeTransfer handles the /resume command
+func HandleResumeTransfer(transferID string) {
+	transfer, exists := GetTransfer(transferID)
+	if !exists {
+		fmt.Println(utils.ErrorColor("❌ Transfer not found:"), utils.CommandColor(transferID))
+		return
+	}
+	
+	if transfer.Status != Paused {
+		fmt.Printf("%s Transfer %s is not paused (current status: %s)\n", 
+			utils.WarningColor("⚠"),
+			utils.CommandColor(transferID),
+			utils.WarningColor(transfer.Status.String()))
+		return
+	}
+	
+	err := ResumeTransfer(transferID)
+	if err != nil {
+		fmt.Println(utils.ErrorColor("❌ Failed to resume transfer:"), err)
+		return
+	}
+	
+	fmt.Printf("%s Transfer %s resumed\n", 
+		utils.SuccessColor("▶"),
+		utils.CommandColor(transferID))
+	
+	fmt.Printf("  %s: %s (%s)\n", 
+		utils.InfoColor("Name"),
+		utils.InfoColor(transfer.Name),
+		utils.InfoColor(formatTransferType(transfer.Type)))
+		
+	fmt.Printf("  %s: %s / %s (%.1f%%)\n", 
+		utils.InfoColor("Progress"),
+		utils.InfoColor(formatSize(transfer.BytesComplete)),
+		utils.InfoColor(formatSize(transfer.Size)),
+		float64(transfer.BytesComplete) / float64(transfer.Size) * 100)
+}
+
+// HandleListTransfers handles the /transfers command
+func HandleListTransfers() {
+	transfers := ListTransfers()
+	
+	if len(transfers) == 0 {
+		fmt.Println(utils.InfoColor("📡 No active transfers"))
+		return
+	}
+	
+	fmt.Println(utils.HeaderColor("📡 Active Transfers:"))
+	fmt.Println(utils.InfoColor("-----------------------------------"))
+	
+	for _, transfer := range transfers {
+		progress := float64(transfer.BytesComplete) / float64(transfer.Size) * 100
+		
+		statusColor := utils.InfoColor
+		statusIcon := ""
+		switch transfer.Status {
+		case Active:
+			statusColor = utils.SuccessColor
+			statusIcon = "▶ "
+		case Paused:
+			statusColor = utils.WarningColor
+			statusIcon = "⏸ "
+		case Completed:
+			statusColor = utils.SuccessColor
+			statusIcon = "✅ "
+		case Failed:
+			statusColor = utils.ErrorColor
+			statusIcon = "❌ "
+		}
+		
+		directionIcon := "📤 "
+		if transfer.Direction == "receive" {
+			directionIcon = "📥 "
+		}
+		
+		fmt.Printf("%s %s%s %s (%s)\n", 
+			statusColor(statusIcon),
+			directionIcon,
+			utils.CommandColor("ID: "+transfer.ID),
+			utils.InfoColor(transfer.Name),
+			statusColor(transfer.Status.String()))
+		
+		fmt.Printf("   Type: %s | Size: %s | Progress: %.1f%% (%s/%s)\n", 
+			formatTransferType(transfer.Type),
+			formatSize(transfer.Size),
+			progress,
+			formatSize(transfer.BytesComplete),
+			formatSize(transfer.Size))
+		
+		relationText := "From"
+		if transfer.Direction == "send" {
+			relationText = "To"
+		}
+		fmt.Printf("   %s: %s | Started: %s ago\n", 
+			relationText,
+			utils.UserColor(transfer.Recipient),
+			formatDuration(time.Since(transfer.StartTime)))
+		
+		fmt.Println(utils.InfoColor("   ---"))
+	}
+
+	fmt.Println(utils.InfoColor("Commands:"))
+	fmt.Printf("  %s - Pause a transfer\n", utils.CommandColor("/pause <transferId>"))
+	fmt.Printf("  %s - Resume a paused transfer\n", utils.CommandColor("/resume <transferId>"))
+	fmt.Println(utils.InfoColor("-----------------------------------"))
+}
+
+// Helper functions for formatting
+
+// formatTransferType returns a human-readable string for the transfer type
+func formatTransferType(t TransferType) string {
+	switch t {
+	case FileTransfer:
+		return "File"
+	case FolderTransfer:
+		return "Folder"
+	default:
+		return "Unknown"
+	}
+}
+
+// formatSize formats bytes into a human-readable string
+func formatSize(bytes int64) string {
+	const (
+		_          = iota
+		KB float64 = 1 << (10 * iota)
+		MB
+		GB
+		TB
+	)
+	
+	var size float64
+	var unit string
+	
+	switch {
+	case bytes >= int64(TB):
+		size = float64(bytes) / TB
+		unit = "TB"
+	case bytes >= int64(GB):
+		size = float64(bytes) / GB
+		unit = "GB"
+	case bytes >= int64(MB):
+		size = float64(bytes) / MB
+		unit = "MB"
+	case bytes >= int64(KB):
+		size = float64(bytes) / KB
+		unit = "KB"
+	default:
+		size = float64(bytes)
+		unit = "bytes"
+	}
+	
+	if size >= 100 || unit == "bytes" {
+		return fmt.Sprintf("%.0f %s", size, unit)
+	}
+	return fmt.Sprintf("%.1f %s", size, unit)
+}
+
+// formatDuration formats a duration into a human-readable string
+func formatDuration(d time.Duration) string {
+	if d.Hours() >= 24 {
+		days := int(d.Hours() / 24)
+		return fmt.Sprintf("%dd %dh", days, int(d.Hours())%24)
+	}
+	if d.Hours() >= 1 {
+		return fmt.Sprintf("%dh %dm", int(d.Hours()), int(d.Minutes())%60)
+	}
+	if d.Minutes() >= 1 {
+		return fmt.Sprintf("%dm %ds", int(d.Minutes()), int(d.Seconds())%60)
+	}
+	return fmt.Sprintf("%ds", int(d.Seconds()))
 }
