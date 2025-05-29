@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
+
 )
 
 func HandleSendFile(conn net.Conn, recipientId, filePath string) {
@@ -35,56 +37,100 @@ func HandleSendFile(conn net.Conn, recipientId, filePath string) {
 		return
 	}
 
-	fmt.Printf("%s Sending file '%s' to user %s...\n", 
+	transferID := GenerateTransferID()
+	fmt.Printf("%s Sending file '%s' to user %s (Transfer ID: %s)...\n",
 		utils.InfoColor("📤"),
-		utils.InfoColor(fileName), 
-		utils.UserColor(recipientId))
-	
-	// Send file request with file size and checksum
-	_, err = conn.Write([]byte(fmt.Sprintf("/FILE_REQUEST %s %s %d %s\n", 
-		recipientId, fileName, fileSize, checksum)))
+		utils.InfoColor(fileName),
+		utils.UserColor(recipientId),
+		utils.CommandColor(transferID))
+
+	// Send file request with file size, checksum, and transfer ID
+	_, err = conn.Write([]byte(fmt.Sprintf("/FILE_REQUEST %s %s %d %s %s\n",
+		recipientId, fileName, fileSize, checksum, transferID)))
 	if err != nil {
 		fmt.Println(utils.ErrorColor("❌ Error sending file request:"), err)
 		return
 	}
 
-	// Create progress bar
+	// Create progress bar with transfer ID
 	bar := utils.CreateProgressBar(fileSize, "📤 Sending file")
-	
-	// Stream file data using io.TeeReader to update progress bar
-	n, err := io.CopyN(conn, io.TeeReader(file, bar), fileSize)
+	bar.SetTransferId(transferID)
+
+	transfer := &Transfer{
+		ID:            transferID,
+		Type:          FileTransfer,
+		Name:          fileName,
+		Size:          fileSize,
+		BytesComplete: 0,
+		Status:        Active,
+		Direction:     "send",
+		Recipient:     recipientId,
+		Path:          filePath,
+		Checksum:      checksum,
+		StartTime:     time.Now(),
+		File:          file,
+		Connection:    conn,
+		ProgressBar:   bar,
+	}
+
+	RegisterTransfer(transfer)
+
+	reader := NewCheckpointedReader(file, transfer, 32768) // 32KB chunks
+
+	n, err := io.CopyN(conn, io.TeeReader(reader, bar), fileSize)
+
 	if err != nil {
+		UpdateTransferStatus(transferID, Failed)
 		fmt.Println(utils.ErrorColor("\n❌ Error sending file:"), err)
+		RemoveTransfer(transferID)
 		return
 	}
-	
+
 	if n != fileSize {
-		fmt.Println(utils.ErrorColor("\n❌ Error: sent"), utils.ErrorColor(n), 
-		    utils.ErrorColor("bytes, expected"), utils.ErrorColor(fileSize), utils.ErrorColor("bytes"))
+		UpdateTransferStatus(transferID, Failed)
+		fmt.Println(utils.ErrorColor("\n❌ Error: sent"), utils.ErrorColor(n),
+			utils.ErrorColor("bytes, expected"), utils.ErrorColor(fileSize), utils.ErrorColor("bytes"))
+		RemoveTransfer(transferID)
 		return
 	}
-	
-	fmt.Printf("%s File '%s' sent successfully!\n", 
-	    utils.SuccessColor("\n✅"),
-	    utils.SuccessColor(fileName))
+
+	// Mark transfer as completed
+	UpdateTransferStatus(transferID, Completed)
+
+	fmt.Printf("%s File '%s' sent successfully!\n",
+		utils.SuccessColor("\n✅"),
+		utils.SuccessColor(fileName))
 	fmt.Println(utils.InfoColor("  MD5 Checksum:"), utils.InfoColor(checksum))
+
+	// Clean up the transfer
+	RemoveTransfer(transferID)
 }
 
 func HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize int64, storeFilePath string) {
-	// Get checksum from the split content
-	parts := strings.SplitN(fileName, "|", 2)
+	// Get checksum and transfer ID from the split content
+	parts := strings.SplitN(fileName, "|", 3)
 	checksum := ""
-	
-	if len(parts) == 2 {
+	transferID := ""
+
+	if len(parts) >= 2 {
 		fileName = parts[0]
 		checksum = parts[1]
 		fmt.Println(utils.InfoColor("📋 Original checksum:"), utils.InfoColor(checksum))
+
+		if len(parts) >= 3 {
+			transferID = parts[2]
+		} else {
+			transferID = GenerateTransferID()
+		}
+	} else {
+		transferID = GenerateTransferID()
 	}
-	
-	fmt.Printf("%s Receiving file: %s (Size: %s)\n", 
+
+	fmt.Printf("%s Receiving file: %s (Size: %s, Transfer ID: %s)\n",
 		utils.InfoColor("📥"),
 		utils.InfoColor(fileName),
-		utils.InfoColor(fmt.Sprintf("%d bytes", fileSize)))
+		utils.InfoColor(fmt.Sprintf("%d bytes", fileSize)),
+		utils.CommandColor(transferID))
 
 	filePath := filepath.Join(storeFilePath, fileName)
 	file, err := os.Create(filePath)
@@ -94,22 +140,49 @@ func HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize in
 	}
 	defer file.Close()
 
-	// Create progress bar
+	// Create progress bar with transfer ID
 	bar := utils.CreateProgressBar(fileSize, "📥 Receiving file")
-	
+	bar.SetTransferId(transferID)
+
+	transfer := &Transfer{
+		ID:            transferID,
+		Type:          FileTransfer,
+		Name:          fileName,
+		Size:          fileSize,
+		BytesComplete: 0,
+		Status:        Active,
+		Direction:     "receive",
+		Recipient:     recipientId,
+		Path:          filePath,
+		Checksum:      checksum,
+		StartTime:     time.Now(),
+		File:          file,
+		Connection:    conn,
+		ProgressBar:   bar,
+	}
+
+	RegisterTransfer(transfer)
+
+	writer := NewCheckpointedWriter(file, transfer, 32768) // 32KB chunks
+
 	// Write to file and update progress bar simultaneously
-	n, err := io.CopyN(file, io.TeeReader(conn, bar), fileSize)
+	n, err := io.CopyN(writer, io.TeeReader(conn, bar), fileSize)
+
 	if err != nil {
+		UpdateTransferStatus(transferID, Failed)
 		fmt.Println(utils.ErrorColor("\n❌ Error receiving file:"), err)
+		RemoveTransfer(transferID)
 		return
 	}
-	
+
 	if n != fileSize {
-		fmt.Println(utils.ErrorColor("\n❌ Error: received"), utils.ErrorColor(n), 
-		    utils.ErrorColor("bytes, expected"), utils.ErrorColor(fileSize), utils.ErrorColor("bytes"))
+		UpdateTransferStatus(transferID, Failed)
+		fmt.Println(utils.ErrorColor("\n❌ Error: received"), utils.ErrorColor(n),
+			utils.ErrorColor("bytes, expected"), utils.ErrorColor(fileSize), utils.ErrorColor("bytes"))
+		RemoveTransfer(transferID)
 		return
 	}
-	
+
 	// Verify checksum if provided
 	if checksum != "" {
 		file.Close() // Close file before calculating checksum
@@ -118,7 +191,7 @@ func HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize in
 			fmt.Println(utils.ErrorColor("\n❌ Error calculating checksum:"), err)
 		} else {
 			fmt.Println(utils.InfoColor("\n📋 Calculated checksum:"), utils.InfoColor(receivedChecksum))
-			
+
 			if helper.VerifyChecksum(checksum, receivedChecksum) {
 				fmt.Println(utils.SuccessColor("✅ Checksum verification successful! File integrity confirmed."))
 			} else {
@@ -127,10 +200,16 @@ func HandleFileTransfer(conn net.Conn, recipientId, fileName string, fileSize in
 		}
 	}
 
-	fmt.Printf("%s File '%s' received successfully!\n", 
-	    utils.SuccessColor("✅"),
-	    utils.SuccessColor(fileName))
+	// Mark transfer as completed
+	UpdateTransferStatus(transferID, Completed)
+
+	fmt.Printf("%s File '%s' received successfully!\n",
+		utils.SuccessColor("✅"),
+		utils.SuccessColor(fileName))
 	fmt.Println(utils.InfoColor("📂 Saved to:"), utils.InfoColor(filePath))
+
+	// Clean up the transfer
+	RemoveTransfer(transferID)
 }
 
 func HandleDownloadRequest(conn net.Conn, recipientId, filePath string) {

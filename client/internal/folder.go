@@ -9,11 +9,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 func HandleSendFolder(conn net.Conn, recipientId, folderPath string) {
 	fmt.Println(utils.InfoColor("📦 Preparing folder for transfer..."))
-	
+
 	//Create a temporary zip file
 	tempZipPath := folderPath + ".zip"
 	err := helper.CreateZipFromFolder(folderPath, tempZipPath)
@@ -40,7 +41,7 @@ func HandleSendFolder(conn net.Conn, recipientId, folderPath string) {
 
 	zipSize := zipInfo.Size()
 	folderName := filepath.Base(folderPath)
-	
+
 	// Calculate checksum of the zip file
 	checksum, err := helper.CalculateFileChecksum(tempZipPath)
 	if err != nil {
@@ -48,53 +49,99 @@ func HandleSendFolder(conn net.Conn, recipientId, folderPath string) {
 		return
 	}
 
-	fmt.Printf("%s Sending folder '%s' to user %s...\n", 
+	transferID := GenerateTransferID()
+
+	fmt.Printf("%s Sending folder '%s' to user %s (Transfer ID: %s)...\n",
 		utils.InfoColor("📤"),
 		utils.InfoColor(folderName),
-		utils.UserColor(recipientId))
-		
-	// Send folder request with zip size and checksum
-	_, err = conn.Write([]byte(fmt.Sprintf("/FOLDER_REQUEST %s %s %d %s\n", 
-		recipientId, folderName, zipSize, checksum)))
+		utils.UserColor(recipientId),
+		utils.CommandColor(transferID))
+
+	// Send folder request with zip size, checksum and transfer ID
+	_, err = conn.Write([]byte(fmt.Sprintf("/FOLDER_REQUEST %s %s %d %s %s\n",
+		recipientId, folderName, zipSize, checksum, transferID)))
 	if err != nil {
 		fmt.Println(utils.ErrorColor("❌ Error sending folder request:"), err)
 		return
 	}
 
-	// Create progress bar
+	// Create progress bar with transfer ID
 	bar := utils.CreateProgressBar(zipSize, "📤 Sending folder")
-	
-	// Stream zip file data
-	reader := io.TeeReader(zipFile, bar)
+	bar.SetTransferId(transferID)
+
+	// Create transfer record
+	transfer := &Transfer{
+		ID:            transferID,
+		Type:          FolderTransfer,
+		Name:          folderName,
+		Size:          zipSize,
+		BytesComplete: 0,
+		Status:        Active,
+		Direction:     "send",
+		Recipient:     recipientId,
+		Path:          folderPath,
+		Checksum:      checksum,
+		StartTime:     time.Now(),
+		File:          zipFile,
+		Connection:    conn,
+		ProgressBar:   bar,
+	}
+
+	// Register the transfer
+	RegisterTransfer(transfer)
+
+	checkpointedReader := NewCheckpointedReader(zipFile, transfer, 32768) // 32KB chunks
+
+	// Stream zip file data using the checkpointed reader with progress bar
+	reader := io.TeeReader(checkpointedReader, bar)
 	n, err := io.CopyN(conn, reader, zipSize)
-	
+
 	if err != nil {
+		UpdateTransferStatus(transferID, Failed)
 		fmt.Println(utils.ErrorColor("\n❌ Error sending folder:"), err)
+		RemoveTransfer(transferID)
 		return
 	}
 	if n != zipSize {
+		UpdateTransferStatus(transferID, Failed)
 		fmt.Println(utils.ErrorColor("\n❌ Error: sent"), utils.ErrorColor(n), utils.ErrorColor("bytes, expected"), utils.ErrorColor(zipSize), utils.ErrorColor("bytes"))
+		RemoveTransfer(transferID)
 		return
 	}
+
+	UpdateTransferStatus(transferID, Completed)
+
 	fmt.Println(utils.SuccessColor("\n✅ Folder"), utils.SuccessColor(folderName), utils.SuccessColor("sent successfully!"))
 	fmt.Println(utils.InfoColor("  MD5 Checksum:"), utils.InfoColor(checksum))
+
+	RemoveTransfer(transferID)
 }
 
 func HandleFolderTransfer(conn net.Conn, recipientId, folderName string, folderSize int64, storeFilePath string) {
-	// Extract checksum if present
+	// Extract checksum and transfer ID if present
 	checksum := ""
-	
-	parts := strings.SplitN(folderName, "|", 2)
-	if len(parts) == 2 {
+	transferID := ""
+
+	parts := strings.SplitN(folderName, "|", 3)
+	if len(parts) >= 2 {
 		folderName = parts[0]
 		checksum = parts[1]
 		fmt.Println(utils.InfoColor("📋 Original checksum:"), utils.InfoColor(checksum))
+
+		if len(parts) >= 3 {
+			transferID = parts[2]
+		} else {
+			transferID = GenerateTransferID()
+		}
+	} else {
+		transferID = GenerateTransferID()
 	}
-	
-	fmt.Printf("%s Receiving folder: %s (Size: %s)\n", 
+
+	fmt.Printf("%s Receiving folder: %s (Size: %s, Transfer ID: %s)\n",
 		utils.InfoColor("📥"),
 		utils.InfoColor(folderName),
-		utils.InfoColor(fmt.Sprintf("%d bytes", folderSize)))
+		utils.InfoColor(fmt.Sprintf("%d bytes", folderSize)),
+		utils.CommandColor(transferID))
 
 	// Create temporary zip file to store received data
 	tempZipPath := filepath.Join(storeFilePath, folderName+".zip")
@@ -103,26 +150,53 @@ func HandleFolderTransfer(conn net.Conn, recipientId, folderName string, folderS
 		fmt.Println(utils.ErrorColor("❌ Error creating temporary zip file:"), err)
 		return
 	}
-	
-	// Create progress bar
+
+	// Create progress bar with transfer ID
 	bar := utils.CreateProgressBar(folderSize, "📥 Receiving folder")
-	
+	bar.SetTransferId(transferID)
+
+	// Create transfer record
+	transfer := &Transfer{
+		ID:            transferID,
+		Type:          FolderTransfer,
+		Name:          folderName,
+		Size:          folderSize,
+		BytesComplete: 0,
+		Status:        Active,
+		Direction:     "receive",
+		Recipient:     recipientId,
+		Path:          tempZipPath,
+		Checksum:      checksum,
+		StartTime:     time.Now(),
+		File:          zipFile,
+		Connection:    conn,
+		ProgressBar:   bar,
+	}
+
+	RegisterTransfer(transfer)
+
+	writer := NewCheckpointedWriter(zipFile, transfer, 32768) // 32KB chunks
+
 	// Receive the zip file data with progress
-	n, err := io.CopyN(zipFile, io.TeeReader(conn, bar), folderSize)
+	n, err := io.CopyN(writer, io.TeeReader(conn, bar), folderSize)
 	zipFile.Close()
-	
+
 	if err != nil {
+		UpdateTransferStatus(transferID, Failed)
 		os.Remove(tempZipPath)
 		fmt.Println(utils.ErrorColor("\n❌ Error receiving folder data:"), err)
+		RemoveTransfer(transferID)
 		return
 	}
 
 	if n != folderSize {
+		UpdateTransferStatus(transferID, Failed)
 		os.Remove(tempZipPath)
 		fmt.Println(utils.ErrorColor("\n❌ Error: received"), utils.ErrorColor(n), utils.ErrorColor("bytes, expected"), utils.ErrorColor(folderSize), utils.ErrorColor("bytes"))
+		RemoveTransfer(transferID)
 		return
 	}
-	
+
 	// Verify checksum if provided
 	if checksum != "" {
 		receivedChecksum, err := helper.CalculateFileChecksum(tempZipPath)
@@ -130,7 +204,7 @@ func HandleFolderTransfer(conn net.Conn, recipientId, folderName string, folderS
 			fmt.Println(utils.ErrorColor("\n❌ Error calculating checksum:"), err)
 		} else {
 			fmt.Println(utils.InfoColor("\n📋 Calculated checksum:"), utils.InfoColor(receivedChecksum))
-			
+
 			if helper.VerifyChecksum(checksum, receivedChecksum) {
 				fmt.Println(utils.SuccessColor("✅ Checksum verification successful! Folder integrity confirmed."))
 			} else {
@@ -144,15 +218,21 @@ func HandleFolderTransfer(conn net.Conn, recipientId, folderName string, folderS
 	destPath := filepath.Join(storeFilePath, folderName)
 	err = helper.ExtractZip(tempZipPath, destPath)
 	if err != nil {
+		UpdateTransferStatus(transferID, Failed)
 		os.Remove(tempZipPath)
 		fmt.Println(utils.ErrorColor("❌ Error extracting folder:"), err)
+		RemoveTransfer(transferID)
 		return
 	}
+
+	UpdateTransferStatus(transferID, Completed)
 
 	// Clean up the temporary zip file
 	os.Remove(tempZipPath)
 	fmt.Println(utils.SuccessColor("✅ Folder"), utils.SuccessColor(folderName), utils.SuccessColor("received and extracted successfully!"))
 	fmt.Println(utils.InfoColor("📂 Saved to:"), utils.InfoColor(destPath))
+
+	RemoveTransfer(transferID)
 }
 
 func HandleLookupRequest(conn net.Conn, userId string) {
