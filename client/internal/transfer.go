@@ -2,6 +2,7 @@ package connection
 
 import (
 	"drizlink/utils"
+	"fmt"
 	"net"
 	"os"
 	"strconv"
@@ -137,4 +138,119 @@ func (tm *TransferManager) Get(id string) (*Transfer, bool) {
 	defer tm.mutex.RUnlock()
 	transfer, exists := tm.transfers[id]
 	return transfer, exists
+}
+
+
+// GetTransfer retrieves a transfer by ID (legacy function for compatibility)
+func GetTransfer(id string) (*Transfer, bool) {
+	// Use old map for backward compatibility
+	TransfersMutex.RLock()
+	defer TransfersMutex.RUnlock()
+	transfer, exists := ActiveTransfers[id]
+	return transfer, exists
+}
+
+func (tm *TransferManager) Remove(id string) {
+	tm.mutex.Lock()
+	defer tm.mutex.Unlock()
+	delete(tm.transfers, id)
+}
+
+// RemoveTransfer removes a completed or failed transfer (legacy function for compatibility)
+func RemoveTransfer(id string) {
+	DefaultManager.Remove(id)
+	// Also maintain old behavior for backward compatibility
+	TransfersMutex.Lock()
+	defer TransfersMutex.Unlock()
+	delete(ActiveTransfers, id)
+}
+
+func (tm *TransferManager) List() []*Transfer {
+	tm.mutex.RLock()
+	defer tm.mutex.RUnlock()
+	
+	transfers := make([]*Transfer, 0, len(tm.transfers))
+	for _, transfer := range tm.transfers {
+		transfers = append(transfers, transfer)
+	}
+	return transfers
+}
+
+// ListTransfers returns all active transfers (legacy function for compatibility)
+func ListTransfers() []*Transfer {
+	return DefaultManager.List()
+}
+
+func (t *Transfer) Pause() error {
+	t.pauseMutex.Lock()
+	defer t.pauseMutex.Unlock()
+	
+	if t.Status != Active {
+		return fmt.Errorf("cannot pause transfer with status: %s", t.Status)
+	}
+	
+	t.Status = Paused
+	t.isPaused = true
+	
+	if t.ProgressBar != nil {
+		t.ProgressBar.SetPaused(true)
+	}
+	
+	return nil
+}
+
+func (t *Transfer) Resume() error {
+	t.pauseMutex.Lock()
+	defer t.pauseMutex.Unlock()
+	
+	if t.Status != Paused {
+		return fmt.Errorf("cannot resume transfer with status: %s", t.Status)
+	}
+	
+	t.Status = Active
+	t.isPaused = false
+	
+	if t.ProgressBar != nil {
+		t.ProgressBar.SetPaused(false)
+	}
+	
+	return nil
+}
+
+func (t *Transfer) UpdateStatus(status TransferStatus) {
+	t.pauseMutex.Lock()
+	defer t.pauseMutex.Unlock()
+	
+	t.Status = status
+}
+
+// UpdateTransferStatus updates the status of a transfer (legacy function for compatibility)
+func UpdateTransferStatus(id string, status TransferStatus) {
+	transfer, exists := GetTransfer(id)
+	if !exists {
+		return
+	}
+	transfer.UpdateStatus(status)
+}
+
+func (t *Transfer) IsPaused() bool {
+	t.pauseMutex.Lock()
+	defer t.pauseMutex.Unlock()
+	return t.isPaused
+}
+
+func (tm *TransferManager) PauseTransfer(id string) error {
+	transfer, exists := tm.Get(id)
+	if !exists {
+		return fmt.Errorf("transfer with ID %s not found", id)
+	}
+	return transfer.Pause()
+}
+
+func (tm *TransferManager) ResumeTransfer(id string) error {
+	transfer, exists := tm.Get(id)
+	if !exists {
+		return fmt.Errorf("transfer with ID %s not found", id)
+	}
+	return transfer.Resume()
 }
