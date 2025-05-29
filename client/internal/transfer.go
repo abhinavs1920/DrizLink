@@ -3,6 +3,7 @@ package connection
 import (
 	"drizlink/utils"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strconv"
@@ -140,7 +141,6 @@ func (tm *TransferManager) Get(id string) (*Transfer, bool) {
 	return transfer, exists
 }
 
-
 // GetTransfer retrieves a transfer by ID (legacy function for compatibility)
 func GetTransfer(id string) (*Transfer, bool) {
 	// Use old map for backward compatibility
@@ -253,4 +253,97 @@ func (tm *TransferManager) ResumeTransfer(id string) error {
 		return fmt.Errorf("transfer with ID %s not found", id)
 	}
 	return transfer.Resume()
+}
+
+
+// PauseTransfer pauses an active transfer (legacy function for compatibility)
+func PauseTransfer(id string) error {
+	return DefaultManager.PauseTransfer(id)
+}
+
+// ResumeTransfer resumes a paused transfer (legacy function for compatibility)
+func ResumeTransfer(id string) error {
+	return DefaultManager.ResumeTransfer(id)
+}
+
+type CheckpointedReader struct {
+	reader     io.Reader
+	bytesRead  int64
+	transfer   *Transfer
+	chunkSize  int
+	buffer     []byte
+}
+
+func NewCheckpointedReader(reader io.Reader, transfer *Transfer, chunkSize int) TransferReader {
+	return &CheckpointedReader{
+		reader:    reader,
+		transfer:  transfer,
+		chunkSize: chunkSize,
+		buffer:    make([]byte, chunkSize),
+	}
+}
+
+func (r *CheckpointedReader) Read(p []byte) (n int, err error) {
+	if r.transfer.IsPaused() {
+		time.Sleep(100 * time.Millisecond)
+		return 0, nil
+	}
+	
+	n, err = r.reader.Read(p)
+	if n > 0 {
+		r.bytesRead += int64(n)
+		r.transfer.BytesComplete = r.bytesRead
+		
+		// Update progress bar if available
+		if r.transfer.ProgressBar != nil {
+			r.transfer.ProgressBar.SetPaused(false) // Ensure not paused
+		}
+	}
+	
+	return n, err
+}
+
+func (r *CheckpointedReader) GetBytesProcessed() int64 {
+	return r.bytesRead
+}
+
+type CheckpointedWriter struct {
+	writer      io.Writer
+	bytesWritten int64
+	transfer    *Transfer
+	chunkSize   int
+	buffer      []byte
+}
+
+func NewCheckpointedWriter(writer io.Writer, transfer *Transfer, chunkSize int) TransferWriter {
+	return &CheckpointedWriter{
+		writer:     writer,
+		transfer:   transfer,
+		chunkSize:  chunkSize,
+		buffer:     make([]byte, chunkSize),
+	}
+}
+
+func (w *CheckpointedWriter) Write(p []byte) (n int, err error) {
+	if w.transfer.IsPaused() {
+		time.Sleep(100 * time.Millisecond)
+		return 0, nil
+	}
+
+	n, err = w.writer.Write(p)
+	if n > 0 {
+		w.bytesWritten += int64(n)
+		w.transfer.BytesComplete = w.bytesWritten
+		
+		// Update progress bar if available
+		if w.transfer.ProgressBar != nil {
+			w.transfer.ProgressBar.SetPaused(false) // Ensure not paused
+		}
+	}
+
+	return n, err
+}
+
+func (w *CheckpointedWriter) GetBytesProcessed() int64 {
+	return w.bytesWritten
 }
