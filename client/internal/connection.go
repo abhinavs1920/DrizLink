@@ -60,7 +60,7 @@ func UserInput(attribute string, conn net.Conn) error {
 				input = strings.TrimSpace(input)
 				continue
 			}
-			
+
 			// Check if it's a directory
 			fileInfo, err := os.Stat(input)
 			if err != nil || !fileInfo.IsDir() {
@@ -70,7 +70,7 @@ func UserInput(attribute string, conn net.Conn) error {
 				input = strings.TrimSpace(input)
 				continue
 			}
-			
+
 			break
 		}
 	}
@@ -141,12 +141,12 @@ func ReadLoop(conn net.Conn) {
 			// Improved approach to accumulate the complete user list
 			fmt.Println(utils.HeaderColor("\n👥 Online Users:"))
 			fmt.Println(utils.InfoColor("-------------------"))
-			
+
 			// Read the complete user list with timeout
 			userList := ""
 			tempBuf := make([]byte, 1024)
 			conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-			
+
 			for {
 				m, err := conn.Read(tempBuf)
 				if err != nil {
@@ -157,10 +157,10 @@ func ReadLoop(conn net.Conn) {
 					break // All data received
 				}
 			}
-			
+
 			// Reset the deadline
 			conn.SetReadDeadline(time.Time{})
-			
+
 			// Process users
 			userCount := 0
 			for _, line := range strings.Split(userList, "\n") {
@@ -189,11 +189,11 @@ func ReadLoop(conn net.Conn) {
 					fmt.Println(utils.SuccessColor(" • "), utils.UserColor(line))
 				}
 			}
-			
+
 			if userCount == 0 {
 				fmt.Println(utils.InfoColor(" No users currently online"))
 			}
-			
+
 			fmt.Println(utils.InfoColor("-------------------"))
 			continue
 		case strings.HasPrefix(message, "/LOOK_REQUEST"):
@@ -322,6 +322,27 @@ func WriteLoop(conn net.Conn) {
 			filePath := args[2]
 			fmt.Println(utils.InfoColor("📥 Requesting download from"), utils.UserColor(recipientId))
 			HandleDownloadRequest(conn, recipientId, filePath)
+			continue
+		case strings.HasPrefix(message, "/transfers"):
+			HandleListTransfers()
+			continue
+		case strings.HasPrefix(message, "/pause"):
+			args := strings.SplitN(message, " ", 2)
+			if len(args) != 2 {
+				fmt.Println(utils.ErrorColor("❌ Invalid arguments. Use: /pause <transferId>"))
+				continue
+			}
+			transferID := args[1]
+			HandlePauseTransfer(transferID)
+			continue
+		case strings.HasPrefix(message, "/resume"):
+			args := strings.SplitN(message, " ", 2)
+			if len(args) != 2 {
+				fmt.Println(utils.ErrorColor("❌ Invalid arguments. Use: /resume <transferId>"))
+				continue
+			}
+			transferID := args[1]
+			HandleResumeTransfer(transferID)
 			continue
 		default:
 			if message != "" {
